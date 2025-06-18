@@ -2,19 +2,21 @@
 
 set -e
 
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+
 echo "===== PREPARING EN-VI DATA ====="
 
 # === Config ===
 SRC=en
 TGT=vi
-DATA_DIR=trans_data 
-SPM_DATA_DIR=trans_data/spm
-TOKENIZER_MODEL=tokenizer/envi.model
-OUT_DIR=data-bin/envi-bpe
+DATA_DIR=$SCRIPT_DIR/trans_data 
+SPM_DATA_DIR=$DATA_DIR/spm
+TOKENIZER_MODEL=$SCRIPT_DIR/tokenizer/envi.model
+OUT_DIR=$SCRIPT_DIR/data-bin/envi-bpe
 SPLITS="train valid test"
 
-mkdir -p $OUT_DIR
-mkdir -p $SPM_DATA_DIR
+mkdir -p "$OUT_DIR"
+mkdir -p "$SPM_DATA_DIR"
 
 # === Encode with SentencePiece ===
 echo "Encoding with SentencePiece model: $TOKENIZER_MODEL"
