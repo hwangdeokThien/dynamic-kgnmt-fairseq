@@ -17,9 +17,17 @@ BIN_DIR=$SCRIPT_DIR/data-bin/envi-bpe
 SP_MODEL=$MODEL_PREFIX.model
 NUM_WORKERS=4
 CHECKPOINT_DIR=$SCRIPT_DIR/checkpoints/envi-transformer
+CHECKPOINT_FILE=$CHECKPOINT_DIR/checkpoint_latest.pt  # Path to the latest checkpoint
 
-# === Create checkpoint directory ===
+# === Create checkpoint directory if it doesn't exist ===
 mkdir -p "$CHECKPOINT_DIR"
+
+# === Check if checkpoint exists ===
+if [ -f "$CHECKPOINT_FILE" ]; then
+    echo "Checkpoint found! Resuming training from $CHECKPOINT_FILE"
+else
+    echo "No checkpoint found. Starting training from scratch."
+fi
 
 # === Train the model on 2 GPUs ===
 echo "Training Transformer model on 2 GPUs..."
@@ -46,6 +54,7 @@ CUDA_VISIBLE_DEVICES=0,1 fairseq-train "$BIN_DIR" \
   --eval-bleu-print-samples \
   --best-checkpoint-metric bleu \
   --maximize-best-checkpoint-metric \
-  --save-dir "$CHECKPOINT_DIR"
+  --save-dir "$CHECKPOINT_DIR" \
+  --restore-file "$CHECKPOINT_FILE" # Restore from the checkpoint if it exists
 
 echo "✅ Training complete! Checkpoints saved in: $CHECKPOINT_DIR"
