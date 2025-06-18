@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+
+set -e
+
+echo "===== PREPARING EN-VI DATA ====="
+
+# === Config ===
+SRC=en
+TGT=vi
+DATA_DIR=trans_data 
+SPM_DATA_DIR=trans_data/spm
+TOKENIZER_MODEL=tokenizer/envi.model
+OUT_DIR=data-bin/envi-bpe
+SPLITS="train valid test"
+
+mkdir -p $OUT_DIR
+mkdir -p $SPM_DATA_DIR
+
+# === Encode with SentencePiece ===
+echo "Encoding with SentencePiece model: $TOKENIZER_MODEL"
+
+for SPLIT in $SPLITS; do
+    for LANG in $SRC $TGT; do
+        INPUT=$DATA_DIR/$SPLIT.$LANG
+        OUTPUT=$SPM_DATA_DIR/$SPLIT.spm.$LANG
+
+        echo "Encoding $INPUT → $OUTPUT"
+
+        python -c "
+import sentencepiece as spm
+sp = spm.SentencePieceProcessor()
+sp.load('$TOKENIZER_MODEL')
+with open('$INPUT', 'r', encoding='utf-8') as fin, open('$OUTPUT', 'w', encoding='utf-8') as fout:
+    for line in fin:
+        fout.write(' '.join(sp.encode(line.strip(), out_type=str)) + '\n')
+"
+    done
+done
+
+# === Binarize with fairseq-preprocess ===
+echo "Running fairseq-preprocess..."
+
+fairseq-preprocess \
+  --source-lang $SRC --target-lang $TGT \
+  --trainpref $SPM_DATA_DIR/train.spm \
+  --validpref $SPM_DATA_DIR/valid.spm \
+  --testpref  $SPM_DATA_DIR/test.spm \
+  --destdir $OUT_DIR \
+  --joined-dictionary \
+  --workers 4
+
+echo "✅ Data preparation complete: $OUT_DIR"
