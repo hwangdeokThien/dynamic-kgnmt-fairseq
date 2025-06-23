@@ -52,3 +52,8 @@ fairseq-preprocess \
   --workers 4
 
 echo "✅ Data preparation complete: $OUT_DIR"
+
+cp $OUT_DIR/train.$SRC-$TGT.$SRC.bin $OUT_DIR/train.$SRC-$TGT.kg.bin
+cp $OUT_DIR/train.$SRC-$TGT.$SRC.idx $OUT_DIR/train.$SRC-$TGT.kg.idx
+cp $OUT_DIR/valid.$SRC-$TGT.$SRC.bin $OUT_DIR/valid.$SRC-$TGT.kg.bin
+cp $OUT_DIR/valid.$SRC-$TGT.$SRC.idx $OUT_DIR/valid.$SRC-$TGT.kg.idx
