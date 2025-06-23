@@ -63,17 +63,6 @@ class KGNMTModelBase(BaseFairseqModel):
         self.cfg = cfg
         self.supports_align_args = True
 
-    # def forward(self, src_tokens, src_lengths, knw_tokens, knw_lengths, prev_output_tokens, **kwargs):
-    #     src_encoder_out = self.src_encoder(src_tokens, src_lengths=src_lengths, **kwargs)
-    #     knw_encoder_out = self.knw_encoder(knw_tokens, src_lengths=knw_lengths, **kwargs)
-    #     decoder_out = self.decoder(
-    #         prev_output_tokens=prev_output_tokens,
-    #         src_encoder_out=src_encoder_out,
-    #         knw_encoder_out=knw_encoder_out,
-    #         **kwargs
-    #     )
-    #     return decoder_out
-
     @classmethod
     def add_args(cls, parser):
         """Add model-specific arguments to the parser."""
@@ -188,7 +177,7 @@ class KGNMTModelBase(BaseFairseqModel):
         Copied from the base class, but without ``**kwargs``,
         which are not supported by TorchScript.
         """
-        src_encoder_out = self.src_encoder(
+        encoder_out = self.src_encoder(
             src_tokens, src_lengths=src_lengths, return_all_hiddens=return_all_hiddens
         )
         knw_encoder_out = self.knw_encoder(
@@ -196,7 +185,7 @@ class KGNMTModelBase(BaseFairseqModel):
         )
         decoder_out = self.decoder(
             prev_output_tokens,
-            src_encoder_out=src_encoder_out,
+            encoder_out=encoder_out,
             knw_encoder_out=knw_encoder_out,
             features_only=features_only,
             alignment_layer=alignment_layer,

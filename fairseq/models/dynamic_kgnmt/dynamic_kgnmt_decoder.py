@@ -187,7 +187,7 @@ class KGNMTDecoderBase(FairseqIncrementalDecoder):
     def forward(
         self,
         prev_output_tokens,
-        src_encoder_out: Optional[Dict[str, List[Tensor]]] = None,
+        encoder_out: Optional[Dict[str, List[Tensor]]] = None,
         knw_encoder_out: Optional[Dict[str, List[Tensor]]] = None,
         incremental_state: Optional[Dict[str, Dict[str, Optional[Tensor]]]] = None,
         features_only: bool = False,
@@ -202,7 +202,7 @@ class KGNMTDecoderBase(FairseqIncrementalDecoder):
         Args:
             prev_output_tokens (LongTensor): previous decoder outputs of shape
                 `(batch, tgt_len)`, for teacher forcing
-            src_encoder_out (optional): output from the source encoder, used for
+            encoder_out (optional): output from the source encoder, used for
                 encoder-side attention, should be of size T x B x C
             incremental_state (dict): dictionary used for storing state during
                 :ref:`Incremental decoding`
@@ -219,7 +219,7 @@ class KGNMTDecoderBase(FairseqIncrementalDecoder):
 
         x, extra = self.extract_features(
             prev_output_tokens,
-            src_encoder_out=src_encoder_out,
+            encoder_out=encoder_out,
             knw_encoder_out=knw_encoder_out,
             incremental_state=incremental_state,
             full_context_alignment=full_context_alignment,
@@ -234,7 +234,7 @@ class KGNMTDecoderBase(FairseqIncrementalDecoder):
     def extract_features(
         self,
         prev_output_tokens,
-        src_encoder_out: Optional[Dict[str, List[Tensor]]],
+        encoder_out: Optional[Dict[str, List[Tensor]]],
         knw_encoder_out: Optional[Dict[str, List[Tensor]]],
         incremental_state: Optional[Dict[str, Dict[str, Optional[Tensor]]]] = None,
         full_context_alignment: bool = False,
@@ -243,7 +243,7 @@ class KGNMTDecoderBase(FairseqIncrementalDecoder):
     ):
         return self.extract_features_scriptable(
             prev_output_tokens,
-            src_encoder_out,
+            encoder_out,
             knw_encoder_out,
             incremental_state,
             full_context_alignment,
@@ -260,7 +260,7 @@ class KGNMTDecoderBase(FairseqIncrementalDecoder):
     def extract_features_scriptable(
         self,
         prev_output_tokens,
-        src_encoder_out: Optional[Dict[str, List[Tensor]]],
+        encoder_out: Optional[Dict[str, List[Tensor]]],
         knw_encoder_out: Optional[Dict[str, List[Tensor]]],
         incremental_state: Optional[Dict[str, Dict[str, Optional[Tensor]]]] = None,
         full_context_alignment: bool = False,
@@ -292,10 +292,10 @@ class KGNMTDecoderBase(FairseqIncrementalDecoder):
 
         src_enc: Optional[Tensor] = None
         src_padding_mask: Optional[Tensor] = None
-        if src_encoder_out is not None and len(src_encoder_out["encoder_out"]) > 0:
-            src_enc = src_encoder_out["encoder_out"][0]
-        if src_encoder_out is not None and len(src_encoder_out["encoder_padding_mask"]) > 0:
-            src_padding_mask = src_encoder_out["encoder_padding_mask"][0]
+        if encoder_out is not None and len(encoder_out["encoder_out"]) > 0:
+            src_enc = encoder_out["encoder_out"][0]
+        if encoder_out is not None and len(encoder_out["encoder_padding_mask"]) > 0:
+            src_padding_mask = encoder_out["encoder_padding_mask"][0]
 
         knw_enc: Optional[Tensor] = None
         knw_padding_mask: Optional[Tensor] = None

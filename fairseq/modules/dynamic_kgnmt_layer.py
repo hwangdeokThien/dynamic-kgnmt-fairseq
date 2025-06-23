@@ -389,7 +389,7 @@ class KGNMTDecoderLayerBase(nn.Module):
     def forward(
         self,
         x,
-        src_encoder_out: Optional[torch.Tensor] = None,
+        encoder_out: Optional[torch.Tensor] = None,
         src_encoder_padding_mask: Optional[torch.Tensor] = None,
         knw_encoder_out: Optional[torch.Tensor] = None,
         knw_encoder_padding_mask: Optional[torch.Tensor] = None,
@@ -437,21 +437,21 @@ class KGNMTDecoderLayerBase(nn.Module):
             and "prev_key" in _self_attn_input_buffer
         ):
             if self_attn_mask is not None:
-                assert src_encoder_out is not None
+                assert encoder_out is not None
                 self_attn_mask = torch.cat(
-                    (x.new_zeros(x.size(0), src_encoder_out.size(0)), self_attn_mask), dim=1
+                    (x.new_zeros(x.size(0), encoder_out.size(0)), self_attn_mask), dim=1
                 )
             if self_attn_padding_mask is not None:
                 if encoder_padding_mask is None:
-                    assert src_encoder_out is not None
+                    assert encoder_out is not None
                     encoder_padding_mask = self_attn_padding_mask.new_zeros(
-                        src_encoder_out.size(1), src_encoder_out.size(0)
+                        encoder_out.size(1), encoder_out.size(0)
                     )
                 self_attn_padding_mask = torch.cat(
                     (encoder_padding_mask, self_attn_padding_mask), dim=1
                 )
-            assert src_encoder_out is not None
-            y = torch.cat((src_encoder_out, x), dim=0)
+            assert encoder_out is not None
+            y = torch.cat((encoder_out, x), dim=0)
         else:
             y = x
 
@@ -514,7 +514,7 @@ class KGNMTDecoderLayerBase(nn.Module):
                 x = self.knw_encoder_attn_layer_norm(x)
         ############################################################
 
-        if self.src_encoder_attn is not None and src_encoder_out is not None:
+        if self.src_encoder_attn is not None and encoder_out is not None:
             residual = x
             if self.normalize_before:
                 x = self.src_encoder_attn_layer_norm(x)
@@ -531,8 +531,8 @@ class KGNMTDecoderLayerBase(nn.Module):
 
             x, attn = self.src_encoder_attn(
                 query=x,
-                key=src_encoder_out,
-                value=src_encoder_out,
+                key=encoder_out,
+                value=encoder_out,
                 key_padding_mask=src_encoder_padding_mask,
                 incremental_state=incremental_state,
                 static_kv=True,
