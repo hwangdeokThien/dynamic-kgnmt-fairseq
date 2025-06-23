@@ -7,7 +7,7 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # === Configuration ===
 SRC=en
 TGT=vi
-DATA_DIR=$SCRIPT_DIR/trans_datad
+DATA_DIR=$SCRIPT_DIR/trans_data
 BIN_DATA_DIR=$SCRIPT_DIR/data-bin/envi-bpe
 CHECKPOINT_DIR=$SCRIPT_DIR/checkpoints/envi-transformer
 BEST_CHECKPOINT=$CHECKPOINT_DIR/checkpoint_best.pt

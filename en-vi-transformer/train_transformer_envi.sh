@@ -29,11 +29,10 @@ else
     echo "No checkpoint found. Starting training from scratch."
 fi
 
-# === Train the model on 2 GPUs ===
-echo "Training Transformer model on 2 GPUs..."
-
-CUDA_VISIBLE_DEVICES=0,1 fairseq-train "$BIN_DIR" \
-  --distributed-world-size 2 \
+# === Train the model ===
+# CUDA_VISIBLE_DEVICES=0,1 fairseq-train "$BIN_DIR" \
+#   --distributed-world-size 2 \
+fairseq-train "$BIN_DIR" \
   --ddp-backend no_c10d \
   --arch transformer_iwslt_vi_en \
   --share-decoder-input-output-embed \
@@ -47,6 +46,7 @@ CUDA_VISIBLE_DEVICES=0,1 fairseq-train "$BIN_DIR" \
   --criterion label_smoothed_cross_entropy \
   --label-smoothing 0.1 \
   --max-tokens 4096 \
+  --max-epoch 50 \
   --eval-bleu \
   --eval-bleu-args '{"beam": 5, "max_len_a": 1.2, "max_len_b": 10}' \
   --eval-bleu-detok moses \
@@ -55,6 +55,6 @@ CUDA_VISIBLE_DEVICES=0,1 fairseq-train "$BIN_DIR" \
   --best-checkpoint-metric bleu \
   --maximize-best-checkpoint-metric \
   --save-dir "$CHECKPOINT_DIR" \
-  --restore-file "$CHECKPOINT_FILE" # Restore from the checkpoint if it exists
+  # --restore-file "$CHECKPOINT_FILE"
 
 echo "✅ Training complete! Checkpoints saved in: $CHECKPOINT_DIR"
