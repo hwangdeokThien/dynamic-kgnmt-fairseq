@@ -9,6 +9,7 @@ echo "===== PREPARING EN-VI DATA ====="
 # === Config ===
 SRC=en
 TGT=vi
+KG=kg
 DATA_DIR=$SCRIPT_DIR/kgnmt_data 
 SPM_DATA_DIR=$DATA_DIR/spm
 TOKENIZER_MODEL=$SCRIPT_DIR/tokenizer/envi.model
@@ -22,7 +23,7 @@ mkdir -p "$SPM_DATA_DIR"
 echo "Encoding with SentencePiece model: $TOKENIZER_MODEL"
 
 for SPLIT in $SPLITS; do
-    for LANG in $SRC $TGT; do
+    for LANG in $SRC $TGT $KG; do
         INPUT=$DATA_DIR/$SPLIT.$LANG
         OUTPUT=$SPM_DATA_DIR/$SPLIT.spm.$LANG
 
@@ -52,10 +53,3 @@ fairseq-preprocess \
   --workers 4
 
 echo "✅ Data preparation complete: $OUT_DIR"
-
-cp $OUT_DIR/train.$SRC-$TGT.$SRC.bin $OUT_DIR/train.$SRC-$TGT.kg.bin
-cp $OUT_DIR/train.$SRC-$TGT.$SRC.idx $OUT_DIR/train.$SRC-$TGT.kg.idx
-cp $OUT_DIR/valid.$SRC-$TGT.$SRC.bin $OUT_DIR/valid.$SRC-$TGT.kg.bin
-cp $OUT_DIR/valid.$SRC-$TGT.$SRC.idx $OUT_DIR/valid.$SRC-$TGT.kg.idx
-cp $OUT_DIR/test.$SRC-$TGT.$SRC.bin $OUT_DIR/test.$SRC-$TGT.kg.bin
-cp $OUT_DIR/test.$SRC-$TGT.$SRC.idx $OUT_DIR/test.$SRC-$TGT.kg.idx
