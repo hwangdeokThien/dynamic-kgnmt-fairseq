@@ -147,6 +147,7 @@ class FairseqTask(object):
         """
         raise NotImplementedError
 
+    # TODO_THESIS: called by get_batch_iterator()
     def dataset(self, split):
         """
         Return a loaded dataset split.
@@ -205,6 +206,7 @@ class FairseqTask(object):
         # ``FairseqDataset`` due to the base implementation there.
         return getattr(dataset, "can_reuse_epoch_itr_across_epochs", False)
 
+    # TODO_THESIS: this is the batch iterator that is used in the training loop
     def get_batch_iterator(
         self,
         dataset,
@@ -318,7 +320,7 @@ class FairseqTask(object):
             batch_sampler = make_batches(dataset, epoch)
 
         # return a reusable, sharded iterator
-        epoch_iter = iterators.EpochBatchIterator(
+        epoch_iter = iterators.EpochBatchIterator( # TODO_THESIS: return the batch iterator, which can contain and load the data
             dataset=dataset,
             collate_fn=dataset.collater,
             batch_sampler=batch_sampler,
@@ -376,6 +378,7 @@ class FairseqTask(object):
         models,
         args,
         seq_gen_cls=None,
+        knowledge_aug=False,
         extra_gen_cls_kwargs=None,
         prefix_allowed_tokens_fn=None,
     ):
@@ -414,6 +417,9 @@ class FairseqTask(object):
         from fairseq.sequence_generator import (
             SequenceGenerator,
             SequenceGeneratorWithAlignment,
+        )
+        from fairseq.sequence_generator_knowledge_aug import (
+            SequenceGeneratorKnowledgeAug,
         )
 
         # Choose search strategy. Defaults to Beam Search.
@@ -482,6 +488,8 @@ class FairseqTask(object):
             if getattr(args, "print_alignment", False):
                 seq_gen_cls = SequenceGeneratorWithAlignment
                 extra_gen_cls_kwargs["print_alignment"] = args.print_alignment
+            elif knowledge_aug:
+                seq_gen_cls = SequenceGeneratorKnowledgeAug
             else:
                 seq_gen_cls = SequenceGenerator
 
