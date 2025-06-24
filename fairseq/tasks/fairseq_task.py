@@ -489,7 +489,6 @@ class FairseqTask(object):
                 seq_gen_cls = SequenceGeneratorWithAlignment
                 extra_gen_cls_kwargs["print_alignment"] = args.print_alignment
             elif knowledge_aug:
-                print('hehe')
                 seq_gen_cls = SequenceGeneratorKnowledgeAug
             else:
                 seq_gen_cls = SequenceGenerator

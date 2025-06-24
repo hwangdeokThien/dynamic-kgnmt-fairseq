@@ -423,7 +423,6 @@ class TranslationKnowledgeAugTask(FairseqTask):
             self.sequence_generator = self.build_generator( # TODO_THESIS: this is the sequence generator that maybe need to include knowledge graph data
                 [model], Namespace(**gen_args), knowledge_aug=True
             )
-            print("sequence generator knw aug:", isinstance(self.sequence_generator, SequenceGeneratorKnowledgeAug))
         return model
 
     # TODO_THESIS: valid step of task
