@@ -52,4 +52,13 @@ fairseq-preprocess \
   --joined-dictionary \
   --workers 4
 
+fairseq-preprocess \
+  --source-lang $KG --target-lang $KG \
+  --trainpref $SPM_DATA_DIR/train.spm \
+  --validpref $SPM_DATA_DIR/valid.spm \
+  --testpref  $SPM_DATA_DIR/test.spm \
+  --destdir $OUT_DIR \
+  --joined-dictionary \
+  --workers 4
+
 echo "✅ Data preparation complete: $OUT_DIR"
