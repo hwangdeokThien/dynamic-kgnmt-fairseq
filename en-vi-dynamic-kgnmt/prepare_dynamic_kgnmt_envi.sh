@@ -65,4 +65,5 @@ mv $OUT_DIR/train.kg-kg.kg.bin $OUT_DIR/train.en-vi.kg.bin
 mv $OUT_DIR/valid.kg-kg.kg.bin $OUT_DIR/valid.en-vi.kg.bin
 mv $OUT_DIR/test.kg-kg.kg.bin $OUT_DIR/test.en-vi.kg.bin
 
+
 echo "✅ Data preparation complete: $OUT_DIR"
