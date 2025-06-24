@@ -12,7 +12,7 @@ TGT=vi
 KG=kg
 DATA_DIR=$SCRIPT_DIR/kgnmt_data 
 SPM_DATA_DIR=$DATA_DIR/spm
-TOKENIZER_MODEL=$SCRIPT_DIR/tokenizer/envi.model
+TOKENIZER_MODEL=$SCRIPT_DIR/tokenizer/envikg.model
 OUT_DIR=$SCRIPT_DIR/data-bin/envi-bpe
 SPLITS="train valid test"
 
