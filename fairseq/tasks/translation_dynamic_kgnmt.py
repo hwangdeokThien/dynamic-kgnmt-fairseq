@@ -421,11 +421,12 @@ class TranslationKnowledgeAugTask(FairseqTask):
             )
 
             gen_args = json.loads(self.cfg.eval_bleu_args)
-            self.sequence_generator = self.build_generator(
+            self.sequence_generator = self.build_generator( # TODO_THESIS: this is the sequence generator that maybe need to include knowledge graph data
                 [model], Namespace(**gen_args)
             )
         return model
 
+    # TODO_THESIS: valid step of task
     def valid_step(self, sample, model, criterion):
         loss, sample_size, logging_output = super().valid_step(sample, model, criterion)
         if self.cfg.eval_bleu:
