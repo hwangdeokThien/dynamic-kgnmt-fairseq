@@ -57,3 +57,5 @@ cp $OUT_DIR/train.$SRC-$TGT.$SRC.bin $OUT_DIR/train.$SRC-$TGT.kg.bin
 cp $OUT_DIR/train.$SRC-$TGT.$SRC.idx $OUT_DIR/train.$SRC-$TGT.kg.idx
 cp $OUT_DIR/valid.$SRC-$TGT.$SRC.bin $OUT_DIR/valid.$SRC-$TGT.kg.bin
 cp $OUT_DIR/valid.$SRC-$TGT.$SRC.idx $OUT_DIR/valid.$SRC-$TGT.kg.idx
+cp $OUT_DIR/test.$SRC-$TGT.$SRC.bin $OUT_DIR/test.$SRC-$TGT.kg.bin
+cp $OUT_DIR/test.$SRC-$TGT.$SRC.idx $OUT_DIR/test.$SRC-$TGT.kg.idx
