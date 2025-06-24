@@ -129,7 +129,7 @@ class KGNMTModelBase(BaseFairseqModel):
         if cfg.offload_activations:
             cfg.checkpoint_activations = True  # offloading implies checkpointing
         encoder = cls.build_encoder(cfg, src_dict, encoder_embed_tokens)
-        knw_encoder = cls.build_encoder(cfg, src_dict, encoder_embed_tokens) # shared embedding
+        knw_encoder = cls.build_knw_encoder(cfg, src_dict, encoder_embed_tokens) # shared embedding
         decoder = cls.build_decoder(cfg, tgt_dict, decoder_embed_tokens)
         return cls(cfg, encoder=encoder, knw_encoder=knw_encoder, decoder=decoder)
 
@@ -148,6 +148,10 @@ class KGNMTModelBase(BaseFairseqModel):
     @classmethod
     def build_encoder(cls, cfg, src_dict, embed_tokens):
         return KGNMTEncoderBase(cfg, src_dict, embed_tokens)
+    
+    @classmethod
+    def build_knw_encoder(cls, cfg, src_dict, embed_tokens):
+        return KGNMTKnowledgeEncoderBase(cfg, src_dict, embed_tokens)
 
     @classmethod
     def build_decoder(cls, cfg, tgt_dict, embed_tokens):
