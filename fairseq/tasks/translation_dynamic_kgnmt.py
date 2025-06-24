@@ -29,6 +29,7 @@ from fairseq.data import (
 from fairseq.data.indexed_dataset import get_available_dataset_impl
 from fairseq.dataclass import ChoiceEnum, FairseqDataclass
 from fairseq.tasks import FairseqTask, register_task
+from fairseq.sequence_generator_knowledge_aug import SequenceGeneratorKnowledgeAug
 
 
 EVAL_BLEU_ORDER = 4
@@ -420,8 +421,9 @@ class TranslationKnowledgeAugTask(FairseqTask):
 
             gen_args = json.loads(self.cfg.eval_bleu_args)
             self.sequence_generator = self.build_generator( # TODO_THESIS: this is the sequence generator that maybe need to include knowledge graph data
-                [model], Namespace(**gen_args)
+                [model], Namespace(**gen_args), knowledge_aug=True
             )
+            print("sequence generator knw aug:", isinstance(self.sequence_generator, SequenceGeneratorKnowledgeAug))
         return model
 
     # TODO_THESIS: valid step of task
