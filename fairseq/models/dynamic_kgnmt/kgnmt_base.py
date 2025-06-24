@@ -186,7 +186,7 @@ class KGNMTModelBase(BaseFairseqModel):
             src_tokens, src_lengths=src_lengths, return_all_hiddens=return_all_hiddens
         )
         knw_encoder_out = self.knw_encoder(
-            knw_tokens, src_lengths=knw_lengths, return_all_hiddens=return_all_hiddens
+            knw_tokens, knw_lengths=knw_lengths, return_all_hiddens=return_all_hiddens
         )
         decoder_out = self.decoder(
             prev_output_tokens,
@@ -196,6 +196,7 @@ class KGNMTModelBase(BaseFairseqModel):
             alignment_layer=alignment_layer,
             alignment_heads=alignment_heads,
             src_lengths=src_lengths,
+            knw_lengths=knw_lengths,
             return_all_hiddens=return_all_hiddens,
         )
         return decoder_out
