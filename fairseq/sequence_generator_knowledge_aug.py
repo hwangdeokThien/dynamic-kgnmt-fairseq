@@ -813,11 +813,14 @@ class EnsembleModel(nn.Module):
         if not self.has_encoder():
             return None
 
-        src_keys = ['src_tokens', 'src_lengths']
-        knw_keys = ['knw_tokens', 'knw_lengths']
-
-        src_input = {k: net_input[k] for k in src_keys if k in net_input}
-        knw_input = {k: net_input[k] for k in knw_keys if k in net_input}
+        src_input = {
+            "src_tokens": net_input["src_tokens"],
+            "src_lengths": net_input["src_lengths"],
+        }
+        knw_input = {
+            "src_tokens": net_input["knw_tokens"],
+            "src_lengths": net_input["knw_lengths"],
+        }
 
         src_encoder_outs = [
             model.encoder.forward_torchscript(src_input) for model in self.models
