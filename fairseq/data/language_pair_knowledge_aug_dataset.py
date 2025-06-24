@@ -80,18 +80,17 @@ def collate(
     src_tokens = src_tokens.index_select(0, sort_order)
 
     # TODO_THESIS: Handle knowledge input here
-    if samples[0].get("knowledge", None) is not None:
-        knw_tokens = merge(
-            "knowledge",
-            left_pad=left_pad_source,
-            pad_to_length=pad_to_length["knowledge"]
-            if pad_to_length is not None
-            else None,
-        )
-        knw_lengths = torch.LongTensor(
-            [s["knowledge"].ne(pad_idx).long().sum() for s in samples]
-        ).index_select(0, sort_order)
-        knw_tokens = knw_tokens.index_select(0, sort_order)
+    knw_tokens = merge(
+        "knowledge",
+        left_pad=left_pad_source,
+        pad_to_length=pad_to_length["knowledge"]
+        if pad_to_length is not None
+        else None,
+    )
+    knw_lengths = torch.LongTensor(
+        [s["knowledge"].ne(pad_idx).long().sum() for s in samples]
+    ).index_select(0, sort_order)
+    knw_tokens = knw_tokens.index_select(0, sort_order)
 
     prev_output_tokens = None
     target = None
@@ -302,18 +301,17 @@ class LanguagePairKnowledgeAugDataset(FairseqDataset):
             self.src_sizes = self.src.sizes
             logger.info("bucketing source lengths: {}".format(list(self.src.buckets)))
 
-            if self.knw is not None:
-                self.knw = BucketPadLengthDataset(
-                    self.knw,
-                    sizes=self.knw_sizes,
-                    num_buckets=num_buckets,
-                    pad_idx=self.knw_dict.pad(),
-                    left_pad=self.left_pad_source,
-                )
-                self.knw_sizes = self.knw.sizes
-                logger.info(
-                    "bucketing knowledge lengths: {}".format(list(self.knw.buckets))
-                )
+            self.knw = BucketPadLengthDataset(
+                self.knw,
+                sizes=self.knw_sizes,
+                num_buckets=num_buckets,
+                pad_idx=self.knw_dict.pad(),
+                left_pad=self.left_pad_source,
+            )
+            self.knw_sizes = self.knw.sizes
+            logger.info(
+                "bucketing knowledge lengths: {}".format(list(self.knw.buckets))
+            )
 
             if self.tgt is not None:
                 self.tgt = BucketPadLengthDataset(
@@ -344,7 +342,7 @@ class LanguagePairKnowledgeAugDataset(FairseqDataset):
 
     def __getitem__(self, index):
         tgt_item = self.tgt[index] if self.tgt is not None else None
-        knw_item = self.knw[index] if self.knw is not None else None
+        knw_item = self.knw[index]
         src_item = self.src[index]
         # Append EOS to end of tgt sentence if it does not have an EOS and remove
         # EOS from end of src sentence if it exists. This is useful when we use
@@ -368,7 +366,7 @@ class LanguagePairKnowledgeAugDataset(FairseqDataset):
             eos = self.src_dict.eos()
             if self.src[index][-1] == eos:
                 src_item = self.src[index][:-1]
-            if self.knw and self.knw[index][-1] == eos:
+            if self.knw[index][-1] == eos:
                 knw_item = self.knw[index][:-1]
 
         example = {

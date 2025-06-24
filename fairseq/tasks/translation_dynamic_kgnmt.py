@@ -101,16 +101,15 @@ def load_langpair_knowledge_aug_dataset(
         knw_dataset = data_utils.load_indexed_dataset(
             prefix + "kg", src_dict, dataset_impl
         )
-        if knw_dataset is not None:
-            if truncate_source:
-                knw_dataset = AppendTokenDataset(
-                    TruncateDataset(
-                        StripTokenDataset(knw_dataset, src_dict.eos()),
-                        max_source_positions - 1,
-                    ),
-                    src_dict.eos(),
-                )
-            knw_datasets.append(knw_dataset)
+        if truncate_source:
+            knw_dataset = AppendTokenDataset(
+                TruncateDataset(
+                    StripTokenDataset(knw_dataset, src_dict.eos()),
+                    max_source_positions - 1,
+                ),
+                src_dict.eos(),
+            )
+        knw_datasets.append(knw_dataset)
 
         tgt_dataset = data_utils.load_indexed_dataset(
             prefix + tgt, tgt_dict, dataset_impl
@@ -162,10 +161,9 @@ def load_langpair_knowledge_aug_dataset(
         src_dataset = AppendTokenDataset(
             src_dataset, src_dict.index("[{}]".format(src))
         )
-        if knw_dataset is not None:
-            knw_dataset = AppendTokenDataset(
-                knw_dataset, src_dict.index("[{}]".format(src))
-            )
+        knw_dataset = AppendTokenDataset(
+            knw_dataset, src_dict.index("[{}]".format(src))
+        )
         if tgt_dataset is not None:
             tgt_dataset = AppendTokenDataset(
                 tgt_dataset, tgt_dict.index("[{}]".format(tgt))
