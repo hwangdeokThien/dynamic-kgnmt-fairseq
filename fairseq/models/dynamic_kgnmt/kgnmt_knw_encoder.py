@@ -103,7 +103,7 @@ class KGNMTKnowledgeEncoderBase(FairseqEncoder):
             self.layer_norm = None
 
     def build_encoder_layer(self, cfg):
-        layer = dynamic_kgnmt_layer.KGNMTKnowledgeEncoderLayerBase(
+        layer = dynamic_kgnmt_layer.KGNMTEncoderLayerBase(
             cfg, return_fc=self.return_fc
         )
         checkpoint = cfg.checkpoint_activations
