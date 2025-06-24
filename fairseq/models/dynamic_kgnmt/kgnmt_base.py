@@ -38,25 +38,25 @@ class KGNMTModelBase(BaseFairseqModel):
 
     Args:
         knw_encoder (KGNMTEncoder): the knowledge encoder
-        src_encoder (KGNMTEncoder): the source encoder
+        encoder (KGNMTEncoder): the source encoder
         decoder (KGNMTDecoder): the decoder
 
     The KGNMT model provides the following named architectures and
     command-line arguments:
 
     .. argparse::
-        :ref: fairseq.models.dynamic_kgnmt_parser
+        :ref: fairseq.models.kgnmt_parser
         :prog:
     """
 
-    def __init__(self, cfg, src_encoder, knw_encoder, decoder):
+    def __init__(self, cfg, encoder, knw_encoder, decoder):
         super().__init__()
         
-        self.src_encoder = src_encoder
+        self.encoder = encoder
         self.knw_encoder = knw_encoder
         self.decoder = decoder
 
-        check_type(self.src_encoder, KGNMTEncoderBase)
+        check_type(self.encoder, KGNMTEncoderBase)
         check_type(self.knw_encoder, KGNMTEncoderBase)
         check_type(self.decoder, KGNMTDecoderBase)
 
@@ -127,10 +127,10 @@ class KGNMTModelBase(BaseFairseqModel):
             )
         if cfg.offload_activations:
             cfg.checkpoint_activations = True  # offloading implies checkpointing
-        src_encoder = cls.build_encoder(cfg, src_dict, encoder_embed_tokens)
+        encoder = cls.build_encoder(cfg, src_dict, encoder_embed_tokens)
         knw_encoder = cls.build_encoder(cfg, src_dict, encoder_embed_tokens) # shared embedding
         decoder = cls.build_decoder(cfg, tgt_dict, decoder_embed_tokens)
-        return cls(cfg, src_encoder=src_encoder, knw_encoder=knw_encoder, decoder=decoder)
+        return cls(cfg, encoder=encoder, knw_encoder=knw_encoder, decoder=decoder)
 
     @classmethod
     def build_embedding(cls, cfg, dictionary, embed_dim, path=None):
@@ -177,7 +177,7 @@ class KGNMTModelBase(BaseFairseqModel):
         Copied from the base class, but without ``**kwargs``,
         which are not supported by TorchScript.
         """
-        encoder_out = self.src_encoder(
+        encoder_out = self.encoder(
             src_tokens, src_lengths=src_lengths, return_all_hiddens=return_all_hiddens
         )
         knw_encoder_out = self.knw_encoder(

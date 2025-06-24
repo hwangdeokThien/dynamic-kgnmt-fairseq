@@ -4,14 +4,14 @@
 # LICENSE file in the root directory of this source tree.
 """isort:skip_file"""
 
-from .dynamic_kgnmt_config import (
+from .kgnmt_config import (
     KGNMTConfig,
     DEFAULT_MAX_SOURCE_POSITIONS,
     DEFAULT_MAX_TARGET_POSITIONS,
     DEFAULT_MIN_PARAMS_TO_WRAP,
 )
-from .dynamic_kgnmt_decoder import KGNMTDecoder, KGNMTDecoderBase, Linear
-from .dynamic_kgnmt_encoder import KGNMTEncoder, KGNMTEncoderBase
+from .kgnmt_decoder import KGNMTDecoder, KGNMTDecoderBase, Linear
+from .kgnmt_encoder import KGNMTEncoder, KGNMTEncoderBase
 from .dynamic_kgnmt_legacy import (
     KGNMTModel,
     base_architecture,
@@ -24,7 +24,7 @@ from .dynamic_kgnmt_legacy import (
     # kgnmt_wmt_en_de_big,
     # kgnmt_wmt_en_de_big_t2t,
 )
-from .dynamic_kgnmt_base import KGNMTModelBase, Embedding
+from .kgnmt_base import KGNMTModelBase, Embedding
 
 
 __all__ = [

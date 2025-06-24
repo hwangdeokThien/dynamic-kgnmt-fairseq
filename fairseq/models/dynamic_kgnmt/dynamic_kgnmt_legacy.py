@@ -8,14 +8,14 @@ from fairseq.models import (
     register_model,
     register_model_architecture,
 )
-from fairseq.models.dynamic_kgnmt.dynamic_kgnmt_config import (
+from fairseq.models.dynamic_kgnmt.kgnmt_config import (
     KGNMTConfig,
     DEFAULT_MAX_SOURCE_POSITIONS,
     DEFAULT_MAX_KNOWLEDGE_POSITIONS,
     DEFAULT_MAX_TARGET_POSITIONS,
     DEFAULT_MIN_PARAMS_TO_WRAP,
 )
-from fairseq.models.dynamic_kgnmt.dynamic_kgnmt_base import (
+from fairseq.models.dynamic_kgnmt.kgnmt_base import (
     KGNMTModelBase,
 )
 
@@ -75,9 +75,9 @@ class KGNMTModel(KGNMTModelBase):
         }
         # fmt: on
 
-    def __init__(self, args, src_encoder, knw_encoder, decoder):
+    def __init__(self, args, encoder, knw_encoder, decoder):
         cfg = KGNMTConfig.from_namespace(args)
-        super().__init__(cfg, src_encoder, knw_encoder, decoder)
+        super().__init__(cfg, encoder, knw_encoder, decoder)
         self.args = args
 
     @classmethod
