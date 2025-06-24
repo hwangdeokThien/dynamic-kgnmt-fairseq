@@ -301,13 +301,13 @@ class KGNMTDecoderLayerBase(nn.Module):
         self.self_attn_layer_norm = LayerNorm(self.embed_dim, export=cfg.export)
 
         if no_encoder_attn:
-            self.src_encoder_attn = None
-            self.src_encoder_attn_layer_norm = None
+            self.encoder_attn = None
+            self.encoder_attn_layer_norm = None
             self.knw_encoder_attn = None
             self.knw_encoder_attn_layer_norm = None
         else:
-            self.src_encoder_attn = self.build_encoder_attention(self.embed_dim, cfg)
-            self.src_encoder_attn_layer_norm = LayerNorm(self.embed_dim, export=cfg.export)
+            self.encoder_attn = self.build_encoder_attention(self.embed_dim, cfg)
+            self.encoder_attn_layer_norm = LayerNorm(self.embed_dim, export=cfg.export)
             self.knw_encoder_attn = self.build_encoder_attention(self.embed_dim, cfg)
             self.knw_encoder_attn_layer_norm = LayerNorm(self.embed_dim, export=cfg.export)
 
@@ -390,7 +390,7 @@ class KGNMTDecoderLayerBase(nn.Module):
         self,
         x,
         encoder_out: Optional[torch.Tensor] = None,
-        src_encoder_padding_mask: Optional[torch.Tensor] = None,
+        encoder_padding_mask: Optional[torch.Tensor] = None,
         knw_encoder_out: Optional[torch.Tensor] = None,
         knw_encoder_padding_mask: Optional[torch.Tensor] = None,
         incremental_state: Optional[Dict[str, Dict[str, Optional[Tensor]]]] = None,
@@ -514,10 +514,10 @@ class KGNMTDecoderLayerBase(nn.Module):
                 x = self.knw_encoder_attn_layer_norm(x)
         ############################################################
 
-        if self.src_encoder_attn is not None and encoder_out is not None:
+        if self.encoder_attn is not None and encoder_out is not None:
             residual = x
             if self.normalize_before:
-                x = self.src_encoder_attn_layer_norm(x)
+                x = self.encoder_attn_layer_norm(x)
             if prev_attn_state is not None:
                 prev_key, prev_value = prev_attn_state[:2]
                 saved_state: Dict[str, Optional[Tensor]] = {
@@ -529,11 +529,11 @@ class KGNMTDecoderLayerBase(nn.Module):
                 assert incremental_state is not None
                 self.encoder_attn._set_input_buffer(incremental_state, saved_state)
 
-            x, attn = self.src_encoder_attn(
+            x, attn = self.encoder_attn(
                 query=x,
                 key=encoder_out,
                 value=encoder_out,
-                key_padding_mask=src_encoder_padding_mask,
+                key_padding_mask=encoder_padding_mask,
                 incremental_state=incremental_state,
                 static_kv=True,
                 need_weights=need_attn or (not self.training and self.need_attn),
@@ -542,7 +542,7 @@ class KGNMTDecoderLayerBase(nn.Module):
             x = self.dropout_module(x)
             x = self.residual_connection(x, residual)
             if not self.normalize_before:
-                x = self.src_encoder_attn_layer_norm(x)
+                x = self.encoder_attn_layer_norm(x)
 
         residual = x
         if self.normalize_before:
