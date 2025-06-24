@@ -19,6 +19,7 @@ from fairseq.models.dynamic_kgnmt import (
     KGNMTConfig,
     KGNMTDecoderBase,
     KGNMTEncoderBase,
+    KGNMTKnowledgeEncoderBase,
 )
 
 
@@ -37,7 +38,7 @@ class KGNMTModelBase(BaseFairseqModel):
     Base model for KGNMT, core model of Dynamic-KGNMT
 
     Args:
-        knw_encoder (KGNMTEncoder): the knowledge encoder
+        knw_encoder (KGNMTKnowledgeEncoder): the knowledge encoder
         encoder (KGNMTEncoder): the source encoder
         decoder (KGNMTDecoder): the decoder
 
@@ -45,7 +46,7 @@ class KGNMTModelBase(BaseFairseqModel):
     command-line arguments:
 
     .. argparse::
-        :ref: fairseq.models.kgnmt_parser
+        :ref: fairseq.models.dynamic_kgnmt_parser
         :prog:
     """
 
@@ -57,7 +58,7 @@ class KGNMTModelBase(BaseFairseqModel):
         self.decoder = decoder
 
         check_type(self.encoder, KGNMTEncoderBase)
-        check_type(self.knw_encoder, KGNMTEncoderBase)
+        check_type(self.knw_encoder, KGNMTKnowledgeEncoderBase)
         check_type(self.decoder, KGNMTDecoderBase)
 
         self.cfg = cfg

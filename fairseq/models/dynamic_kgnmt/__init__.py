@@ -34,6 +34,8 @@ __all__ = [
     "KGNMTDecoderBase",
     "KGNMTEncoder",
     "KGNMTEncoderBase",
+    "KGNMTKnowledgeEncoder",
+    "KGNMTKnowledgeEncoderBase",
     "KGNMTModel",
     "Embedding",
     "Linear",
