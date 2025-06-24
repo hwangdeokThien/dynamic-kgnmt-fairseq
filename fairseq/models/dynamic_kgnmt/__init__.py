@@ -12,6 +12,7 @@ from .kgnmt_config import (
 )
 from .kgnmt_decoder import KGNMTDecoder, KGNMTDecoderBase, Linear
 from .kgnmt_encoder import KGNMTEncoder, KGNMTEncoderBase
+from .kgnmt_knw_encoder import KGNMTKnowledgeEncoder, KGNMTKnowledgeEncoderBase
 from .dynamic_kgnmt_legacy import (
     KGNMTModel,
     base_architecture,
