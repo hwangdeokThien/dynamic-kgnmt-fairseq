@@ -336,21 +336,22 @@ class TranslationKnowledgeAugTask(FairseqTask):
             )
 
         # load dictionaries
-        # knw_sep = "<k>"
-        # trans_rel = "<t>"
-        # hid_sen = "<x>"
+        
+        knw_sep = "<k>"
+        trans_rel = "<t>"
+        hid_sen = "<x>"
         src_dict = cls.load_dictionary(
             os.path.join(paths[0], "dict.{}.txt".format(cfg.source_lang))
         )
         tgt_dict = cls.load_dictionary(
             os.path.join(paths[0], "dict.{}.txt".format(cfg.target_lang))
         )
-        # src_dict.add_symbol(knw_sep)
-        # src_dict.add_symbol(trans_rel)
-        # tgt_dict.add_symbol(knw_sep)
-        # tgt_dict.add_symbol(trans_rel)
-        # tgt_dict.add_symbol(hid_sen)
-        # tgt_dict.add_symbol(hid_sen)
+        src_dict.add_symbol(knw_sep)
+        src_dict.add_symbol(trans_rel)
+        tgt_dict.add_symbol(knw_sep)
+        tgt_dict.add_symbol(trans_rel)
+        tgt_dict.add_symbol(hid_sen)
+        tgt_dict.add_symbol(hid_sen)
         assert src_dict.pad() == tgt_dict.pad()
         assert src_dict.eos() == tgt_dict.eos()
         assert src_dict.unk() == tgt_dict.unk()
