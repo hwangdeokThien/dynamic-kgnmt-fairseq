@@ -110,7 +110,6 @@ class KgNMTModel(KgNMTModelBase):
         src_dict, tgt_dict = task.source_dictionary, task.target_dictionary
 
         if args.share_all_embeddings:
-            print("TUNG TUNG TUNG")
             if src_dict != tgt_dict:
                 raise ValueError("--share-all-embeddings requires a joined dictionary")
             if args.encoder_embed_dim != args.decoder_embed_dim:
