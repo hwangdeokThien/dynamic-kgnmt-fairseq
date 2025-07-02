@@ -39,11 +39,15 @@ from fairseq.file_io import PathManager
 from fairseq.logging import meters, metrics, progress_bar
 from fairseq.model_parallel.megatron_trainer import MegatronTrainer
 from fairseq.trainer import Trainer
+from fairseq.dynamic_kgnmt_trainer import DynamicKgNMTTrainer
 
-
+# TODO_THESIS: main() function, where everything starts
 def main(cfg: FairseqConfig) -> None:
     if isinstance(cfg, argparse.Namespace):
         cfg = convert_namespace_to_omegaconf(cfg)
+
+    # import pprint
+    # pprint.pprint(OmegaConf.to_container(cfg))
 
     utils.import_user_module(cfg.common)
     add_defaults(cfg)
@@ -71,7 +75,13 @@ def main(cfg: FairseqConfig) -> None:
         checkpoint_utils.verify_checkpoint_directory(cfg.checkpoint.save_dir)
 
     # Print args
-    logger.info(cfg)
+    # TODO_THESIS: print args in readable format
+    logger.info(OmegaConf.to_yaml(cfg, resolve=True))
+    # logger.info(cfg)
+
+    # Setup task, e.g., translation, language modeling, etc.
+    if cfg.task is None:
+        raise Exception("Must specify task with --task")
 
     if cfg.checkpoint.write_checkpoints_asynchronously:
         try:
@@ -145,7 +155,7 @@ def main(cfg: FairseqConfig) -> None:
 
     # Build trainer
     if cfg.common.model_parallel_size == 1:
-        trainer = Trainer(cfg, task, model, criterion, quantizer)
+        trainer = DynamicKgNMTTrainer(cfg, task, model, criterion, quantizer)
     else:
         trainer = MegatronTrainer(cfg, task, model, criterion)
     logger.info(
@@ -256,10 +266,10 @@ def should_stop_early(cfg: DictConfig, valid_loss: float) -> bool:
         else:
             return False
 
-
+# TODO_THESIS: train() function, where the training loop is defined
 @metrics.aggregate("train")
 def train(
-    cfg: DictConfig, trainer: Trainer, task: tasks.FairseqTask, epoch_itr
+    cfg: DictConfig, trainer: DynamicKgNMTTrainer, task: tasks.FairseqTask, epoch_itr
 ) -> Tuple[List[Optional[float]], bool]:
     """Train the model for one epoch and return validation losses."""
     # Initialize data iterator
@@ -374,7 +384,7 @@ def _flatten_config(cfg: DictConfig):
 
 def validate_and_save(
     cfg: DictConfig,
-    trainer: Trainer,
+    trainer: DynamicKgNMTTrainer,
     task: tasks.FairseqTask,
     epoch_itr,
     valid_subsets: List[str],
@@ -452,10 +462,10 @@ def get_training_stats(stats: Dict[str, Any]) -> Dict[str, Any]:
     stats["wall"] = round(metrics.get_meter("default", "wall").elapsed_time, 0)
     return stats
 
-
+# TODO_THESIS: validate() function, where the validation loop is defined
 def validate(
     cfg: DictConfig,
-    trainer: Trainer,
+    trainer: DynamicKgNMTTrainer,
     task: tasks.FairseqTask,
     epoch_itr,
     subsets: List[str],
@@ -537,7 +547,7 @@ def validate(
 
 def get_valid_stats(
     cfg: DictConfig,
-    trainer: Trainer,
+    trainer: DynamicKgNMTTrainer,
     stats: Dict[str, Any],
     tracking_best: bool,
 ) -> Dict[str, Any]:
@@ -557,6 +567,7 @@ def cli_main(
 ) -> None:
     parser = options.get_training_parser()
     args = options.parse_args_and_arch(parser, modify_parser=modify_parser)
+    # parser.print_help()
 
     cfg = convert_namespace_to_omegaconf(args)
 
