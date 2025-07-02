@@ -172,7 +172,7 @@ class KnowledgeSelectorBase(BaseFairseqModel):
         # c_s: (B, C), z_mean: (B, Z, C) → output: (B, Z)
         scores = torch.bmm(z_mean, c_s.unsqueeze(2)).squeeze(-1)  # (B, Z)
         probs = torch.softmax(scores, dim=-1)  # (B, Z)
-        print("Probs shape: ", probs.shape)
+        # print("Probs shape: ", probs.shape)
 
         selected_triple_ids, selected_knw_tokens, selected_knw_lengths = self._sample_triples(
             probs=probs,
