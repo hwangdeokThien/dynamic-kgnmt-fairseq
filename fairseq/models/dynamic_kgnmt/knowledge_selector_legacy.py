@@ -8,28 +8,28 @@ from fairseq.models import (
     register_model,
     register_model_architecture,
 )
-from fairseq.models.dynamic_kgnmt.dynamic_kgnmt_config import (
-    DynamicKgNMTConfig,
+from fairseq.models.dynamic_kgnmt.kgnmt_config import (
+    KgNMTConfig,
     DEFAULT_MAX_SOURCE_POSITIONS,
     DEFAULT_MAX_KNOWLEDGE_POSITIONS,
     DEFAULT_MAX_TARGET_POSITIONS,
     DEFAULT_MIN_PARAMS_TO_WRAP,
 )
-from fairseq.models.dynamic_kgnmt.dynamic_kgnmt_base import (
-    DynamicKgNMTModelBase,
+from fairseq.models.dynamic_kgnmt.knowledge_selector_base import (
+    KnowledgeSelectorBase,
 )
 
 
-@register_model("dynamic_kgnmt")
-class DynamicKgNMTModel(DynamicKgNMTModelBase):
+@register_model("knowledge_selector")
+class KnowledgeSelector(KnowledgeSelectorBase):
     """
-    This is the legacy implementation of the kgnmt model that
+    This is the legacy implementation of the knowledge selector model that
     uses argparse for configuration.
     """
 
-    def __init__(self, args, knowledge_selector, kgnmt):
-        cfg = DynamicKgNMTConfig.from_namespace(args)
-        super().__init__(cfg, knowledge_selector, kgnmt)
+    def __init__(self, args, encoder, knw_encoder, decoder):
+        cfg = KgNMTConfig.from_namespace(args)
+        super().__init__(cfg, encoder, knw_encoder, decoder)
         self.args = args
 
     @classmethod
@@ -38,29 +38,8 @@ class DynamicKgNMTModel(DynamicKgNMTModelBase):
         # we want to build the args recursively in this case.
         # do not set defaults so that settings defaults from various architectures still works
         gen_parser_from_dataclass(
-            parser, DynamicKgNMTConfig(), delete_default=True, with_prefix=""
+            parser, KgNMTConfig(), delete_default=True, with_prefix=""
         )
-        # === KGNMT args ===
-        parser.add_argument("--encoder_embed_dim", type=int)
-        parser.add_argument("--encoder_layers", type=int)
-        parser.add_argument("--decoder_embed_dim", type=int)
-        parser.add_argument("--decoder_layers", type=int)
-        parser.add_argument("--dropout", type=float)
-        parser.add_argument("--share_decoder_input_output_embed", action="store_true")
-        parser.add_argument("--activation_fn", type=str)
-        parser.add_argument("--attention_dropout", type=float)
-        parser.add_argument("--activation_dropout", type=float)
-
-        # === Knowledge Selector ===
-        parser.add_argument("--sample_times", type=int)
-        parser.add_argument("--src_encoder_embed_dim", type=int)
-        parser.add_argument("--src_encoder_layers", type=int)
-        parser.add_argument("--knw_encoder_embed_dim", type=int)
-        parser.add_argument("--knw_encoder_layers", type=int)
-        parser.add_argument("--knowledge_selector_dropout", type=float)
-        parser.add_argument("--knowledge_selector_attention_dropout", type=float)
-        parser.add_argument("--knowledge_selector_activation_dropout", type=float)
-        parser.add_argument("--knowledge_selector_activation_fn", type=str)
 
     @classmethod
     def build_model(cls, args, task):
@@ -105,31 +84,31 @@ class DynamicKgNMTModel(DynamicKgNMTModelBase):
             args.min_params_to_wrap = getattr(
                 args, "min_params_to_wrap", DEFAULT_MIN_PARAMS_TO_WRAP
             )
-
-        cfg = DynamicKgNMTConfig.from_namespace(args)
+        cfg = KgNMTConfig.from_namespace(args)
         return super().build_model(cfg, task)
 
     @classmethod
     def build_embedding(cls, args, dictionary, embed_dim, path=None):
         return super().build_embedding(
-            DynamicKgNMTConfig.from_namespace(args), dictionary, embed_dim, path
+            KgNMTConfig.from_namespace(args), dictionary, embed_dim, path
         )
 
     @classmethod
     def build_encoder(cls, args, src_dict, embed_tokens):
         return super().build_encoder(
-            DynamicKgNMTConfig.from_namespace(args), src_dict, embed_tokens
+            KgNMTConfig.from_namespace(args), src_dict, embed_tokens
         )
 
     @classmethod
     def build_decoder(cls, args, tgt_dict, embed_tokens):
         return super().build_decoder(
-            DynamicKgNMTConfig.from_namespace(args), tgt_dict, embed_tokens
+            KgNMTConfig.from_namespace(args), tgt_dict, embed_tokens
         )
 
 
 # architectures
-@register_model_architecture("dynamic_kgnmt", "dynamic_kgnmt_tiny")
+
+@register_model_architecture("knowledge_selector", "knowledge_selector_tiny")
 def tiny_architecture(args):
     args.encoder_embed_dim = getattr(args, "encoder_embed_dim", 64)
     args.encoder_ffn_embed_dim = getattr(args, "encoder_ffn_embed_dim", 64)
@@ -140,7 +119,7 @@ def tiny_architecture(args):
     return base_architecture(args)
 
 
-@register_model_architecture("dynamic_kgnmt", "dynamic_kgnmt_base")
+@register_model_architecture("knowledge_selector", "knowledge_selector")
 def base_architecture(args):
     args.encoder_embed_path = getattr(args, "encoder_embed_path", None)
     args.encoder_embed_dim = getattr(args, "encoder_embed_dim", 512)
@@ -197,9 +176,8 @@ def base_architecture(args):
     args.quant_noise_pq_block_size = getattr(args, "quant_noise_pq_block_size", 8)
     args.quant_noise_scalar = getattr(args, "quant_noise_scalar", 0)
 
-
-@register_model_architecture("dynamic_kgnmt", "dynamic_kgnmt_iwslt_vi_en")
-def dynamic_kgnmt_iwslt_vi_en(args):
+@register_model_architecture("knowledge_selector", "knowledge_selector_iwslt_vi_en")
+def knowledge_selector_iwslt_vi_en(args):
     args.encoder_embed_dim = getattr(args, "encoder_embed_dim", 512)
     args.encoder_ffn_embed_dim = getattr(args, "encoder_ffn_embed_dim", 1024)
     args.encoder_attention_heads = getattr(args, "encoder_attention_heads", 4)
@@ -210,7 +188,6 @@ def dynamic_kgnmt_iwslt_vi_en(args):
     args.decoder_layers = getattr(args, "decoder_layers", 6)
     base_architecture(args)
 
-
-@register_model_architecture("dynamic_kgnmt", "dynamic_kgnmt_wmt_en_vi")
-def dynamic_kgnmt_wmt_en_vi(args):
+@register_model_architecture("knowledge_selector", "knowledge_selector_wmt_en_vi")
+def knowledge_selector_wmt_en_vi(args):
     base_architecture(args)

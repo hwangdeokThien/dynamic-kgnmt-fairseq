@@ -20,7 +20,7 @@ DEFAULT_MAX_TARGET_POSITIONS = 1024
 
 DEFAULT_MIN_PARAMS_TO_WRAP = int(1e8)
 
-_NAME_PARSER = r"(decoder|encoder|quant_noise)_(.*)"
+_NAME_PARSER = r"(decoder|encoder|quant_noise|knw_encoder|src_encoder)_(.*)"
 
 
 @dataclass
@@ -113,7 +113,7 @@ class KgNMTConfig(FairseqDataclass):
     )
     adaptive_input: bool = False
     encoder: EncDecBaseConfig = EncDecBaseConfig()
-    # TODO should really be in the encoder config
+    knw_encoder: EncDecBaseConfig = EncDecBaseConfig()
     max_source_positions: int = field(
         default=DEFAULT_MAX_SOURCE_POSITIONS,
         metadata={"help": "Maximum input length supported by the encoder"},
@@ -123,7 +123,6 @@ class KgNMTConfig(FairseqDataclass):
         metadata={"help": "Maximum knowledge length supported by the encoder"},
     )
     decoder: DecoderConfig = DecoderConfig()
-    # TODO should really be in the decoder config
     max_target_positions: int = field(
         default=DEFAULT_MAX_TARGET_POSITIONS,
         metadata={"help": "Maximum output length supported by the decoder"},
@@ -344,3 +343,206 @@ class KgNMTConfig(FairseqDataclass):
             return config
         else:
             return args
+
+@dataclass
+class KnowledgeSelectorConfig(FairseqDataclass):
+    dropout: float = field(default=0.1, metadata={"help": "Dropout probability"})
+    attention_dropout: float = field(default=0.0, metadata={"help": "Dropout for attention weights"})
+    activation_dropout: float = field(default=0.0, metadata={"help": "Dropout after activation in FFN"})
+    activation_fn: ChoiceEnum(utils.get_available_activation_fns()) = field(
+        default="relu", metadata={"help": "Activation function"}
+    )
+    
+    # Sample times for selecting triples
+    sample_times: int = field(
+        default=30, metadata={"help": "Number of times to sample knowledge triples"}
+    )
+    relu_dropout: float = 0.0
+    # Two independent encoders
+    encoder: EncDecBaseConfig = field(
+        default_factory=EncDecBaseConfig,
+        metadata={"help": "Encoder config for source sentence"}
+    )
+    knw_encoder: EncDecBaseConfig = field(
+        default_factory=EncDecBaseConfig,
+        metadata={"help": "Encoder config for knowledge triples"}
+    )
+
+    max_source_positions: int = field(
+        default=DEFAULT_MAX_SOURCE_POSITIONS,
+        metadata={"help": "Maximum input length supported by the source encoder"},
+    )
+    max_knowledge_positions: int = field(
+        default=DEFAULT_MAX_KNOWLEDGE_POSITIONS,
+        metadata={"help": "Maximum input length supported by the knowledge encoder"},
+    )
+
+    # Optional: support quant_noise if needed
+    quant_noise: QuantNoiseConfig = field(
+        default=QuantNoiseConfig(),
+        metadata={"help": "Quantization noise for compression"},
+    )
+    no_scale_embedding: bool = field(
+        default=False, metadata={"help": "if True, dont scale embeddings"}
+    )
+    layernorm_embedding: bool = field(
+        default=False, metadata={"help": "add layernorm to embedding"}
+    )
+    no_token_positional_embeddings: bool = field(
+        default=False,
+        metadata={
+            "help": "if True, disables positional embeddings (outside self attention)"
+        },
+    )
+    export: bool = field(
+        default=False,
+        metadata={"help": "make the layernorm exportable with torchscript."},
+    )
+    adaptive_input: bool = False
+    checkpoint_activations: bool = field(default=False, metadata={"help": "Enable activation checkpointing"})
+    offload_activations: bool = field(default=False, metadata={"help": "Offload activations to CPU/GPU"})
+
+    min_params_to_wrap: int = field(
+        default=DEFAULT_MIN_PARAMS_TO_WRAP,
+        metadata={"help": "Minimum params to wrap with FSDP"}
+    )
+
+    def __getattr__(self, name):
+        match = re.match(_NAME_PARSER, name)
+        if match:
+            sub = safe_getattr(self, match[1])
+            return safe_getattr(sub, match[2])
+        raise AttributeError(f"invalid argument {name}.")
+
+    def __setattr__(self, name, value):
+        match = re.match(_NAME_PARSER, name)
+        if match:
+            sub = safe_getattr(self, match[1])
+            setattr(sub, match[2], value)
+        else:
+            super().__setattr__(name, value)
+
+    @staticmethod
+    def _copy_keys(args, cls, prefix, seen):
+        """
+        copy the prefixed keys (decoder_embed_dim) to the DC fields: decoder.embed_dim
+        """
+        cfg = cls()
+        for fld in fields(cls):
+            # for all the fields in the DC, find the fields (e.g. embed_dim)
+            # in the namespace with the prefix (e.g. decoder)
+            # and set it on the dc.
+            args_key = f"{prefix}_{fld.name}"
+            if safe_hasattr(args, args_key):
+                seen.add(args_key)
+                setattr(cfg, fld.name, safe_getattr(args, args_key))
+            if safe_hasattr(args, fld.name):
+                seen.add(fld.name)
+                setattr(cfg, fld.name, safe_getattr(args, fld.name))
+        return cfg
+    
+    @classmethod
+    def from_namespace(cls, args):
+        if args is None:
+            return None
+        if not isinstance(args, cls):
+            seen = set()
+            config = cls()
+
+            for fld in fields(cls):
+                if fld.name == "src_encoder":
+                    if safe_hasattr(args, "src_encoder"):
+                        seen.add("encoder")
+                        config.encoder = EncDecBaseConfig(**args.src_encoder)
+                    else:
+                        config.encoder = KnowledgeSelectorConfig._copy_keys(
+                            args, EncDecBaseConfig, "encoder", seen
+                        )
+                elif fld.name == "knw_encoder":
+                    if safe_hasattr(args, "knw_encoder"):
+                        seen.add("knw_encoder")
+                        config.knw_encoder = EncDecBaseConfig(**args.knw_encoder)
+                    else:
+                        config.knw_encoder = KnowledgeSelectorConfig._copy_keys(
+                            args, EncDecBaseConfig, "knw_encoder", seen
+                        )
+                elif fld.name == "quant_noise":
+                    if safe_hasattr(args, "quant_noise"):
+                        seen.add("quant_noise")
+                        config.quant_noise = QuantNoiseConfig(**args.quant_noise)
+                    else:
+                        config.quant_noise = KnowledgeSelectorConfig._copy_keys(
+                            args, QuantNoiseConfig, "quant_noise", seen
+                        )
+                elif safe_hasattr(args, fld.name):
+                    seen.add(fld.name)
+                    setattr(config, fld.name, safe_getattr(args, fld.name))
+
+            # copy leftovers
+            args_dict = (
+                args._asdict()
+                if safe_hasattr(args, "_asdict")
+                else vars(args)
+                if safe_hasattr(args, "__dict__")
+                else {}
+            )
+            for key, value in args_dict.items():
+                if key not in seen:
+                    setattr(config, key, value)
+
+            return config
+        else:
+            return args
+
+@dataclass
+class DynamicKgNMTConfig(FairseqDataclass):
+    kgnmt: KgNMTConfig = field(
+        default_factory=KgNMTConfig,
+        metadata={"help": "Configuration for the KG-based translation model"}
+    )
+    knowledge_selector: KnowledgeSelectorConfig = field(
+        default_factory=KnowledgeSelectorConfig,
+        metadata={"help": "Configuration for the dual-encoder knowledge selector"}
+    )
+
+    @classmethod
+    def from_namespace(cls, args):
+        if args is None:
+            return None
+        if isinstance(args, cls):
+            return args
+        
+        flat_args = vars(args)
+        cfg = cls()
+
+        kgnmt_args = flat_args.copy()
+        knowledge_selector_args = flat_args.copy()
+
+        kgnmt_excludes = [
+            "sample_times", "src_encoder_embed_dim", 
+            "src_encoder_layers", "knw_encoder_embed_dim",
+            "knw_encoder_layers", "knowledge_selector_dropout", 
+            "knowledge_selector_attention_dropout", "knowledge_selector_activation_dropout", 
+            "knowledge_selector_activation_fn"
+        ]
+
+        knowledge_selector_excludes = [
+            "encoder_embed_dim", 
+            "encoder_layers", "decoder_embed_dim", "decoder_layers", 
+            "dropout", "share_decoder_input_output_embed", "activation_fn", 
+            "attention_dropout", "activation_dropout"
+        ]
+
+        for exclude in kgnmt_excludes:
+            if exclude in kgnmt_args:
+                del kgnmt_args[exclude]
+
+        for exclude in knowledge_selector_excludes:
+            if exclude in knowledge_selector_args:
+                del knowledge_selector_args[exclude]
+
+        # Pass filtered arguments to each config
+        cfg.kgnmt = KgNMTConfig.from_namespace(kgnmt_args)
+        cfg.knowledge_selector = KnowledgeSelectorConfig.from_namespace(knowledge_selector_args)
+
+        return cfg

@@ -4,51 +4,55 @@
 # LICENSE file in the root directory of this source tree.
 """isort:skip_file"""
 
-from .kgnmt_config import (
-    KGNMTConfig,
+from .dynamic_kgnmt_config import (
+    KgNMTConfig,
+    KnowledgeSelectorConfig,
+    DynamicKgNMTConfig,
     DEFAULT_MAX_SOURCE_POSITIONS,
     DEFAULT_MAX_TARGET_POSITIONS,
     DEFAULT_MIN_PARAMS_TO_WRAP,
 )
-from .kgnmt_decoder import KGNMTDecoder, KGNMTDecoderBase, Linear
-from .kgnmt_encoder import KGNMTEncoder, KGNMTEncoderBase
-from .kgnmt_knw_encoder import KGNMTKnowledgeEncoder, KGNMTKnowledgeEncoderBase
-from .dynamic_kgnmt_legacy import (
-    KGNMTModel,
-    base_architecture,
-    tiny_architecture,
-    # kgnmt_iwslt_de_en,
-    kgnmt_iwslt_vi_en,
-    kgnmt_wmt_en_vi,
-    # kgnmt_vaswani_wmt_en_de_big,
-    # kgnmt_vaswani_wmt_en_fr_big,
-    # kgnmt_wmt_en_de_big,
-    # kgnmt_wmt_en_de_big_t2t,
-)
-from .kgnmt_base import KGNMTModelBase, Embedding
 
+from .kgnmt_decoder import KgNMTDecoder, KgNMTDecoderBase, Linear
+from .kgnmt_encoder import KgNMTEncoder, KgNMTEncoderBase
+from .kgnmt_knw_encoder import KgNMTKnowledgeEncoder, KgNMTKnowledgeEncoderBase
+
+from .kgnmt_base import KgNMTModelBase, Embedding
+from .knowledge_selector_base import KnowledgeSelectorBase
+from .dynamic_kgnmt_base import DynamicKgNMTModelBase
+
+from .kgnmt_legacy import KgNMTModel
+from .knowledge_selector_legacy import KnowledgeSelector
+from .dynamic_kgnmt_legacy import (
+    DynamicKgNMTModel,
+    tiny_architecture,
+    base_architecture,
+    dynamic_kgnmt_iwslt_vi_en,
+    dynamic_kgnmt_wmt_en_vi,
+)
 
 __all__ = [
-    "KGNMTModelBase",
-    "KGNMTConfig",
-    "KGNMTDecoder",
-    "KGNMTDecoderBase",
-    "KGNMTEncoder",
-    "KGNMTEncoderBase",
-    "KGNMTKnowledgeEncoder",
-    "KGNMTKnowledgeEncoderBase",
-    "KGNMTModel",
+    "KgNMTModelBase",
+    "KnowledgeSelectorBase",
+    "DynamicKgNMTModelBase",
+    "KgNMTConfig",
+    "KnowledgeSelectorConfig",
+    "DynamicKgNMTConfig",
+    "KgNMTDecoder",
+    "KgNMTDecoderBase",
+    "KgNMTEncoder",
+    "KgNMTEncoderBase",
+    "KgNMTKnowledgeEncoder",
+    "KgNMTKnowledgeEncoderBase",
+    "KgNMTModel",
+    "KnowledgeSelector",
+    "DynamicKgNMTModel",
     "Embedding",
     "Linear",
     "base_architecture",
     "tiny_architecture",
-    # "kgnmt_iwslt_de_en",
-    "kgnmt_iwslt_vi_en",
-    "kgnmt_wmt_en_vi",
-    # "kgnmt_vaswani_wmt_en_de_big",
-    # "kgnmt_vaswani_wmt_en_fr_big",
-    # "kgnmt_wmt_en_de_big",
-    # "kgnmt_wmt_en_de_big_t2t",
+    "dynamic_kgnmt_iwslt_vi_en",
+    "dynamic_kgnmt_wmt_en_vi",
     "DEFAULT_MAX_SOURCE_POSITIONS",
     "DEFAULT_MAX_TARGET_POSITIONS",
     "DEFAULT_MIN_PARAMS_TO_WRAP",

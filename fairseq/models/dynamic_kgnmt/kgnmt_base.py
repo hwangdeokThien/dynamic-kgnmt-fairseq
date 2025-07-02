@@ -16,12 +16,11 @@ from fairseq.dataclass.utils import gen_parser_from_dataclass
 from fairseq.distributed import fsdp_wrap
 from fairseq.models import BaseFairseqModel
 from fairseq.models.dynamic_kgnmt import (
-    KGNMTConfig,
-    KGNMTDecoderBase,
-    KGNMTEncoderBase,
-    KGNMTKnowledgeEncoderBase,
+    KgNMTConfig,
+    KgNMTDecoderBase,
+    KgNMTEncoderBase,
+    KgNMTKnowledgeEncoderBase,
 )
-
 
 logger = logging.getLogger(__name__)
 
@@ -33,16 +32,16 @@ def check_type(module, expected_type):
     else:
         assert isinstance(module, expected_type), f"{type(module)} != {expected_type}"
 
-class KGNMTModelBase(BaseFairseqModel):
+class KgNMTModelBase(BaseFairseqModel):
     """
-    Base model for KGNMT, core model of Dynamic-KGNMT
+    Base model for KgNMT, core model of Dynamic-KgNMT
 
     Args:
-        knw_encoder (KGNMTKnowledgeEncoder): the knowledge encoder
-        encoder (KGNMTEncoder): the source encoder
-        decoder (KGNMTDecoder): the decoder
+        knw_encoder (KgNMTKnowledgeEncoder): the knowledge encoder
+        encoder (KgNMTEncoder): the source encoder
+        decoder (KgNMTDecoder): the decoder
 
-    The KGNMT model provides the following named architectures and
+    The KgNMT model provides the following named architectures and
     command-line arguments:
 
     .. argparse::
@@ -57,9 +56,9 @@ class KGNMTModelBase(BaseFairseqModel):
         self.knw_encoder = knw_encoder
         self.decoder = decoder
 
-        check_type(self.encoder, KGNMTEncoderBase)
-        check_type(self.knw_encoder, KGNMTEncoderBase)
-        check_type(self.decoder, KGNMTDecoderBase)
+        check_type(self.encoder, KgNMTEncoderBase)
+        check_type(self.knw_encoder, KgNMTKnowledgeEncoderBase)
+        check_type(self.decoder, KgNMTDecoderBase)
 
         self.cfg = cfg
         self.supports_align_args = True
@@ -69,7 +68,7 @@ class KGNMTModelBase(BaseFairseqModel):
         """Add model-specific arguments to the parser."""
         # we want to build the args recursively in this case.
         gen_parser_from_dataclass(
-            parser, KGNMTConfig(), delete_default=False, with_prefix=""
+            parser, KgNMTConfig(), delete_default=False, with_prefix=""
         )
 
     @classmethod
@@ -87,7 +86,7 @@ class KGNMTModelBase(BaseFairseqModel):
         if cfg.decoder.layers_to_keep:
             cfg.decoder.layers = len(cfg.decoder.layers_to_keep.split(","))
 
-        src_dict, tgt_dict = task.source_dictionary, task.target_dictionary
+        src_dict, knw_dict, tgt_dict = task.source_dictionary, task.knowledge_dictionary, task.target_dictionary
 
         if cfg.share_all_embeddings:
             if src_dict != tgt_dict:
@@ -120,8 +119,12 @@ class KGNMTModelBase(BaseFairseqModel):
             decoder_embed_tokens = encoder_embed_tokens
             cfg.share_decoder_input_output_embed = True
         else:
+            print(cfg)
             encoder_embed_tokens = cls.build_embedding(
                 cfg, src_dict, cfg.encoder.embed_dim, cfg.encoder.embed_path
+            )
+            knw_encoder_embed_tokens = cls.build_embedding(
+                cfg, knw_dict, cfg.knw_encoder.embed_dim, cfg.knw_encoder.embed_path
             )
             decoder_embed_tokens = cls.build_embedding(
                 cfg, tgt_dict, cfg.decoder.embed_dim, cfg.decoder.embed_path
@@ -129,7 +132,7 @@ class KGNMTModelBase(BaseFairseqModel):
         if cfg.offload_activations:
             cfg.checkpoint_activations = True  # offloading implies checkpointing
         encoder = cls.build_encoder(cfg, src_dict, encoder_embed_tokens)
-        knw_encoder = cls.build_encoder(cfg, src_dict, encoder_embed_tokens) # shared embedding
+        knw_encoder = cls.build_knw_encoder(cfg, knw_dict, knw_encoder_embed_tokens) # shared embedding
         decoder = cls.build_decoder(cfg, tgt_dict, decoder_embed_tokens)
         return cls(cfg, encoder=encoder, knw_encoder=knw_encoder, decoder=decoder)
 
@@ -147,15 +150,15 @@ class KGNMTModelBase(BaseFairseqModel):
 
     @classmethod
     def build_encoder(cls, cfg, src_dict, embed_tokens):
-        return KGNMTEncoderBase(cfg, src_dict, embed_tokens)
+        return KgNMTEncoderBase(cfg, src_dict, embed_tokens)
     
     @classmethod
-    def build_knw_encoder(cls, cfg, src_dict, embed_tokens):
-        return KGNMTKnowledgeEncoderBase(cfg, src_dict, embed_tokens)
+    def build_knw_encoder(cls, cfg, knw_dict, embed_tokens):
+        return KgNMTKnowledgeEncoderBase(cfg, knw_dict, embed_tokens)
 
     @classmethod
     def build_decoder(cls, cfg, tgt_dict, embed_tokens):
-        return KGNMTDecoderBase(
+        return KgNMTDecoderBase(
             cfg,
             tgt_dict,
             embed_tokens,

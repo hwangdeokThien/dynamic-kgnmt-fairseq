@@ -13,7 +13,7 @@ from torch import Tensor
 from fairseq import utils
 from fairseq.distributed import fsdp_wrap
 from fairseq.models import FairseqEncoder
-from fairseq.models.dynamic_kgnmt import KGNMTConfig
+from fairseq.models.dynamic_kgnmt import KgNMTConfig
 from fairseq.modules import (
     FairseqDropout,
     LayerDropModuleList,
@@ -28,13 +28,13 @@ from fairseq.modules.quant_noise import quant_noise as apply_quant_noise_
 
 # rewrite name for backward compatibility in `make_generation_fast_`
 def module_name_fordropout(module_name: str) -> str:
-    if module_name == "KGNMTEncoderBase":
-        return "KGNMTEncoder"
+    if module_name == "KgNMTEncoderBase":
+        return "KgNMTEncoder"
     else:
         return module_name
 
 
-class KGNMTEncoderBase(FairseqEncoder):
+class KgNMTEncoderBase(FairseqEncoder):
     """
     Transformer encoder consisting of *cfg.encoder.layers* layers. Each layer
     is a :class:`TransformerEncoderLayer`.
@@ -103,7 +103,7 @@ class KGNMTEncoderBase(FairseqEncoder):
             self.layer_norm = None
 
     def build_encoder_layer(self, cfg):
-        layer = dynamic_kgnmt_layer.KGNMTEncoderLayerBase(
+        layer = dynamic_kgnmt_layer.KgNMTEncoderLayerBase(
             cfg, return_fc=self.return_fc
         )
         checkpoint = cfg.checkpoint_activations
@@ -346,11 +346,11 @@ class KGNMTEncoderBase(FairseqEncoder):
         return state_dict
 
 
-class KGNMTEncoder(KGNMTEncoderBase):
+class KgNMTEncoder(KgNMTEncoderBase):
     def __init__(self, args, dictionary, embed_tokens, return_fc=False):
         self.args = args
         super().__init__(
-            KGNMTConfig.from_namespace(args),
+            KgNMTConfig.from_namespace(args),
             dictionary,
             embed_tokens,
             return_fc=return_fc,
@@ -358,5 +358,5 @@ class KGNMTEncoder(KGNMTEncoderBase):
 
     def build_encoder_layer(self, args):
         return super().build_encoder_layer(
-            KGNMTConfig.from_namespace(args),
+            KgNMTConfig.from_namespace(args),
         )

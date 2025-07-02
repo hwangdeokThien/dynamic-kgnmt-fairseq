@@ -13,7 +13,7 @@ from torch import Tensor
 from fairseq import utils
 from fairseq.distributed import fsdp_wrap
 from fairseq.models import FairseqIncrementalDecoder
-from fairseq.models.dynamic_kgnmt import KGNMTConfig
+from fairseq.models.dynamic_kgnmt import KgNMTConfig
 from fairseq.modules import (
     AdaptiveSoftmax,
     BaseLayer,
@@ -30,16 +30,16 @@ from fairseq.modules.quant_noise import quant_noise as apply_quant_noise_
 
 # rewrite name for backward compatibility in `make_generation_fast_`
 def module_name_fordropout(module_name: str) -> str:
-    if module_name == "KGNMTDecoderBase":
-        return "KGNMTDecoder"
+    if module_name == "KgNMTDecoderBase":
+        return "KgNMTDecoder"
     else:
         return module_name
 
 
-class KGNMTDecoderBase(FairseqIncrementalDecoder):
+class KgNMTDecoderBase(FairseqIncrementalDecoder):
     """
-    KGNMT decoder consisting of *cfg.decoder.layers* layers. Each layer
-    is a :class:`KGNMTDecoderLayer`.
+    KgNMT decoder consisting of *cfg.decoder.layers* layers. Each layer
+    is a :class:`KgNMTDecoderLayer`.
 
     Args:
         cfg (argparse.Namespace): parsed command-line arguments
@@ -173,7 +173,7 @@ class KGNMTDecoderBase(FairseqIncrementalDecoder):
             )
 
     def build_decoder_layer(self, cfg, no_encoder_attn=False):
-        layer = dynamic_kgnmt_layer.KGNMTDecoderLayerBase(cfg, no_encoder_attn)
+        layer = dynamic_kgnmt_layer.KgNMTDecoderLayerBase(cfg, no_encoder_attn)
         checkpoint = cfg.checkpoint_activations
         if checkpoint:
             offload_to_cpu = cfg.offload_activations
@@ -465,7 +465,7 @@ def Linear(in_features, out_features, bias=True):
     return m
 
 
-class KGNMTDecoder(KGNMTDecoderBase):
+class KgNMTDecoder(KgNMTDecoderBase):
     def __init__(
         self,
         args,
@@ -476,7 +476,7 @@ class KGNMTDecoder(KGNMTDecoderBase):
     ):
         self.args = args
         super().__init__(
-            KGNMTConfig.from_namespace(args),
+            KgNMTConfig.from_namespace(args),
             dictionary,
             embed_tokens,
             no_encoder_attn=no_encoder_attn,
@@ -485,10 +485,10 @@ class KGNMTDecoder(KGNMTDecoderBase):
 
     def build_output_projection(self, args, dictionary, embed_tokens):
         super().build_output_projection(
-            KGNMTConfig.from_namespace(args), dictionary, embed_tokens
+            KgNMTConfig.from_namespace(args), dictionary, embed_tokens
         )
 
     def build_decoder_layer(self, args, no_encoder_attn=False):
         return super().build_decoder_layer(
-            KGNMTConfig.from_namespace(args), no_encoder_attn=no_encoder_attn
+            KgNMTConfig.from_namespace(args), no_encoder_attn=no_encoder_attn
         )

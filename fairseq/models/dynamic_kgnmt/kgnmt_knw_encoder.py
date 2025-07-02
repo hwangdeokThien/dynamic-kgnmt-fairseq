@@ -13,7 +13,7 @@ from torch import Tensor
 from fairseq import utils
 from fairseq.distributed import fsdp_wrap
 from fairseq.models import FairseqEncoder
-from fairseq.models.dynamic_kgnmt import KGNMTConfig
+from fairseq.models.dynamic_kgnmt import KgNMTConfig
 from fairseq.modules import (
     FairseqDropout,
     LayerDropModuleList,
@@ -28,15 +28,15 @@ from fairseq.modules.quant_noise import quant_noise as apply_quant_noise_
 
 # rewrite name for backward compatibility in `make_generation_fast_`
 def module_name_fordropout(module_name: str) -> str:
-    if module_name == "KGNMTKnowledgeEncoderBase":
-        return "KGNMTKnowledgeEncoder"
+    if module_name == "KgNMTKnowledgeEncoderBase":
+        return "KgNMTKnowledgeEncoder"
     else:
         return module_name
 
 
-class KGNMTKnowledgeEncoderBase(FairseqEncoder):
+class KgNMTKnowledgeEncoderBase(FairseqEncoder):
     """
-    Transformer encoder consisting of *cfg.encoder.layers* layers. Each layer
+    Transformer encoder consisting of *cfg.knw_encoder.layers* layers. Each layer
     is a :class:`TransformerEncoderLayer`.
 
     Args:
@@ -53,11 +53,13 @@ class KGNMTKnowledgeEncoderBase(FairseqEncoder):
         self.dropout_module = FairseqDropout(
             cfg.dropout, module_name=module_name_fordropout(self.__class__.__name__)
         )
-        self.encoder_layerdrop = cfg.encoder.layerdrop
+        self.encoder_layerdrop = cfg.knw_encoder.layerdrop
         self.return_fc = return_fc
 
         embed_dim = embed_tokens.embedding_dim
         self.padding_idx = embed_tokens.padding_idx
+        self.knw_sep_idx = self.dictionary.index("<k>")
+
         self.max_source_positions = cfg.max_source_positions
 
         self.embed_tokens = embed_tokens
@@ -69,7 +71,7 @@ class KGNMTKnowledgeEncoderBase(FairseqEncoder):
                 cfg.max_source_positions,
                 embed_dim,
                 self.padding_idx,
-                learned=cfg.encoder.learned_pos,
+                learned=cfg.knw_encoder.learned_pos,
             )
             if not cfg.no_token_positional_embeddings
             else None
@@ -93,17 +95,17 @@ class KGNMTKnowledgeEncoderBase(FairseqEncoder):
         else:
             self.layers = nn.ModuleList([])
         self.layers.extend(
-            [self.build_encoder_layer(cfg) for i in range(cfg.encoder.layers)]
+            [self.build_encoder_layer(cfg) for i in range(cfg.knw_encoder.layers)]
         )
         self.num_layers = len(self.layers)
 
-        if cfg.encoder.normalize_before:
+        if cfg.knw_encoder.normalize_before:
             self.layer_norm = LayerNorm(embed_dim, export=cfg.export)
         else:
             self.layer_norm = None
 
     def build_encoder_layer(self, cfg):
-        layer = dynamic_kgnmt_layer.KGNMTEncoderLayerBase(
+        layer = dynamic_kgnmt_layer.KgNMTEncoderLayerBase(
             cfg, return_fc=self.return_fc
         )
         checkpoint = cfg.checkpoint_activations
@@ -117,14 +119,14 @@ class KGNMTKnowledgeEncoderBase(FairseqEncoder):
         return layer
 
     def forward_embedding(
-        self, knw_tokens, token_embedding: Optional[torch.Tensor] = None
+        self, src_tokens, token_embedding: Optional[torch.Tensor] = None
     ):
         # embed tokens and positions
         if token_embedding is None:
-            token_embedding = self.embed_tokens(knw_tokens)
+            token_embedding = self.embed_tokens(src_tokens)
         x = embed = self.embed_scale * token_embedding
         if self.embed_positions is not None:
-            x = embed + self.embed_positions(knw_tokens)
+            x = embed + self.embed_positions(src_tokens)
         if self.layernorm_embedding is not None:
             x = self.layernorm_embedding(x)
         x = self.dropout_module(x)
@@ -134,16 +136,17 @@ class KGNMTKnowledgeEncoderBase(FairseqEncoder):
 
     def forward(
         self,
-        knw_tokens,
-        knw_lengths: Optional[torch.Tensor] = None,
+        src_tokens,
+        src_lengths: Optional[torch.Tensor] = None,
+        knw_sep: Optional[bool] = False,
         return_all_hiddens: bool = False,
         token_embeddings: Optional[torch.Tensor] = None,
     ):
         """
         Args:
-            knw_tokens (LongTensor): tokens in the source language of shape
-                `(batch, knw_len)`
-            knw_lengths (torch.LongTensor): lengths of each source sentence of
+            src_tokens (LongTensor): tokens in the source language of shape
+                `(batch, src_len)`
+            src_lengths (torch.LongTensor): lengths of each source sentence of
                 shape `(batch)`
             return_all_hiddens (bool, optional): also return all of the
                 intermediate hidden states (default: False).
@@ -153,17 +156,17 @@ class KGNMTKnowledgeEncoderBase(FairseqEncoder):
         Returns:
             dict:
                 - **encoder_out** (Tensor): the last encoder layer's output of
-                  shape `(knw_len, batch, embed_dim)`
+                  shape `(src_len, batch, embed_dim)`
                 - **encoder_padding_mask** (ByteTensor): the positions of
-                  padding elements of shape `(batch, knw_len)`
+                  padding elements of shape `(batch, src_len)`
                 - **encoder_embedding** (Tensor): the (scaled) embedding lookup
-                  of shape `(batch, knw_len, embed_dim)`
+                  of shape `(batch, src_len, embed_dim)`
                 - **encoder_states** (List[Tensor]): all intermediate
-                  hidden states of shape `(knw_len, batch, embed_dim)`.
+                  hidden states of shape `(src_len, batch, embed_dim)`.
                   Only populated if *return_all_hiddens* is True.
         """
         return self.forward_scriptable(
-            knw_tokens, knw_lengths, return_all_hiddens, token_embeddings
+            src_tokens, src_lengths, knw_sep, return_all_hiddens, token_embeddings
         )
 
     # TorchScript doesn't support super() method so that the scriptable Subclass
@@ -172,17 +175,19 @@ class KGNMTKnowledgeEncoderBase(FairseqEncoder):
     # call the helper function from scriptable Subclass.
     def forward_scriptable(
         self,
-        knw_tokens,
-        knw_lengths: Optional[torch.Tensor] = None,
+        src_tokens,
+        src_lengths: Optional[torch.Tensor] = None,
+        knw_sep: Optional[bool] = False,
         return_all_hiddens: bool = False,
         token_embeddings: Optional[torch.Tensor] = None,
     ):
         """
         Args:
-            knw_tokens (LongTensor): tokens in the source language of shape
-                `(batch, knw_len)`
-            knw_lengths (torch.LongTensor): lengths of each source sentence of
+            src_tokens (LongTensor): tokens in the source language of shape
+                `(batch, src_len)`
+            src_lengths (torch.LongTensor): lengths of each source sentence of
                 shape `(batch)`
+            knw_sep (bool, optional): whether to use knowledge separation
             return_all_hiddens (bool, optional): also return all of the
                 intermediate hidden states (default: False).
             token_embeddings (torch.Tensor, optional): precomputed embeddings
@@ -191,25 +196,26 @@ class KGNMTKnowledgeEncoderBase(FairseqEncoder):
         Returns:
             dict:
                 - **encoder_out** (Tensor): the last encoder layer's output of
-                  shape `(knw_len, batch, embed_dim)`
+                  shape `(src_len, batch, embed_dim)`
                 - **encoder_padding_mask** (ByteTensor): the positions of
-                  padding elements of shape `(batch, knw_len)`
+                  padding elements of shape `(batch, src_len)`
                 - **encoder_embedding** (Tensor): the (scaled) embedding lookup
-                  of shape `(batch, knw_len, embed_dim)`
+                  of shape `(batch, src_len, embed_dim)`
                 - **encoder_states** (List[Tensor]): all intermediate
-                  hidden states of shape `(knw_len, batch, embed_dim)`.
+                  hidden states of shape `(src_len, batch, embed_dim)`.
                   Only populated if *return_all_hiddens* is True.
         """
         # compute padding mask
-        encoder_padding_mask = knw_tokens.eq(self.padding_idx)
+        encoder_padding_mask = src_tokens.eq(self.padding_idx)
+
         has_pads = (
-            torch.tensor(knw_tokens.device.type == "xla") or encoder_padding_mask.any()
+            torch.tensor(src_tokens.device.type == "xla") or encoder_padding_mask.any()
         )
         # Torchscript doesn't handle bool Tensor correctly, so we need to work around.
         if torch.jit.is_scripting():
             has_pads = torch.tensor(1) if has_pads else torch.tensor(0)
 
-        x, encoder_embedding = self.forward_embedding(knw_tokens, token_embeddings)
+        x, encoder_embedding = self.forward_embedding(src_tokens, token_embeddings)
 
         # account for padding while computing the representation
         x = x * (
@@ -249,20 +255,34 @@ class KGNMTKnowledgeEncoderBase(FairseqEncoder):
         # `forward` so we use a dictionary instead.
         # TorchScript does not support mixed values so the values are all lists.
         # The empty list is equivalent to None.
-        knw_lengths = (
-            knw_tokens.ne(self.padding_idx)
+        src_lengths = (
+            src_tokens.ne(self.padding_idx)
             .sum(dim=1, dtype=torch.int32)
             .reshape(-1, 1)
             .contiguous()
         )
+
+        triple_indices = torch.zeros_like(src_tokens, dtype=torch.long)
+        if knw_sep:
+            # 1 where token is <k>, 0 otherwise, ignoring pads
+            # is_sep = (src_tokens == self.knw_sep_idx) & (~src_tokens.eq(self.padding_idx))
+            is_sep = (src_tokens == self.knw_sep_idx) & (~src_tokens.eq(self.padding_idx))
+            # Cumulative sum of separators along each row (batch), left-padding aware
+            triple_indices = is_sep.cumsum(dim=1)
+            triple_indices.masked_fill_(src_tokens.eq(self.padding_idx), 0)  # keep pads as 0
+            triple_indices = triple_indices.transpose(0, 1)  # T x B
+        else:
+            triple_indices = triple_indices.transpose(0, 1)  # T x B (all 0s)
+
         return {
             "encoder_out": [x],  # T x B x C
             "encoder_padding_mask": [encoder_padding_mask],  # B x T
             "encoder_embedding": [encoder_embedding],  # B x T x C
             "encoder_states": encoder_states,  # List[T x B x C]
             "fc_results": fc_results,  # List[T x B x C]
-            "knw_tokens": [],
-            "knw_lengths": [knw_lengths],
+            "src_tokens": [],
+            "src_lengths": [src_lengths],
+            "triple_indices": [triple_indices],  # T x B
         }
 
     @torch.jit.export
@@ -294,15 +314,15 @@ class KGNMTKnowledgeEncoderBase(FairseqEncoder):
                 encoder_out["encoder_embedding"][0].index_select(0, new_order)
             ]
 
-        if len(encoder_out["knw_tokens"]) == 0:
-            knw_tokens = []
+        if len(encoder_out["src_tokens"]) == 0:
+            src_tokens = []
         else:
-            knw_tokens = [(encoder_out["knw_tokens"][0]).index_select(0, new_order)]
+            src_tokens = [(encoder_out["src_tokens"][0]).index_select(0, new_order)]
 
-        if len(encoder_out["knw_lengths"]) == 0:
-            knw_lengths = []
+        if len(encoder_out["src_lengths"]) == 0:
+            src_lengths = []
         else:
-            knw_lengths = [(encoder_out["knw_lengths"][0]).index_select(0, new_order)]
+            src_lengths = [(encoder_out["src_lengths"][0]).index_select(0, new_order)]
 
         encoder_states = encoder_out["encoder_states"]
         if len(encoder_states) > 0:
@@ -314,8 +334,8 @@ class KGNMTKnowledgeEncoderBase(FairseqEncoder):
             "encoder_padding_mask": new_encoder_padding_mask,  # B x T
             "encoder_embedding": new_encoder_embedding,  # B x T x C
             "encoder_states": encoder_states,  # List[T x B x C]
-            "knw_tokens": knw_tokens,  # B x T
-            "knw_lengths": knw_lengths,  # B x 1
+            "src_tokens": src_tokens,  # B x T
+            "src_lengths": src_lengths,  # B x 1
         }
 
     @torch.jit.export
@@ -346,11 +366,11 @@ class KGNMTKnowledgeEncoderBase(FairseqEncoder):
         return state_dict
 
 
-class KGNMTKnowledgeEncoder(KGNMTKnowledgeEncoderBase):
+class KgNMTKnowledgeEncoder(KgNMTKnowledgeEncoderBase):
     def __init__(self, args, dictionary, embed_tokens, return_fc=False):
         self.args = args
         super().__init__(
-            KGNMTConfig.from_namespace(args),
+            KgNMTConfig.from_namespace(args),
             dictionary,
             embed_tokens,
             return_fc=return_fc,
@@ -358,5 +378,5 @@ class KGNMTKnowledgeEncoder(KGNMTKnowledgeEncoderBase):
 
     def build_encoder_layer(self, args):
         return super().build_encoder_layer(
-            KGNMTConfig.from_namespace(args),
+            KgNMTConfig.from_namespace(args),
         )
