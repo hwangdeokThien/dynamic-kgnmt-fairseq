@@ -136,6 +136,9 @@ def collate(
         },
         "target": target,
     }
+    # print("TUNG TUNG TUNG SAHUR")
+    # print("Src tokens", batch["net_input"]["src_tokens"][0])
+    # print("Knw tokens", batch["net_input"]["knw_tokens"][0])
     if prev_output_tokens is not None:
         batch["net_input"]["prev_output_tokens"] = prev_output_tokens.index_select(
             0, sort_order
@@ -264,6 +267,9 @@ class LanguagePairKnowledgeAugDataset(FairseqDataset):
         self.knw_sizes = np.array(knw_sizes) if knw_sizes is not None else None
         self.tgt_sizes = np.array(tgt_sizes) if tgt_sizes is not None else None
         # TODO_THESIS: notice the size, which maybe used later
+        # print("src sizes: ", self.src_sizes)
+        # print("knw sizes: ", self.knw_sizes)
+        # print("tgt sizes: ", self.tgt_sizes)
         self.sizes = (
             np.vstack((self.src_sizes, self.knw_sizes, self.tgt_sizes)).T
             if self.tgt_sizes is not None
