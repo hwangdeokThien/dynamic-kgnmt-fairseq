@@ -21,6 +21,7 @@ from fairseq.dataclass.configs import (
     InteractiveConfig,
     OptimizationConfig,
     EMAConfig,
+    OptimizerConfig,
 )
 from fairseq.dataclass.utils import gen_parser_from_dataclass
 
@@ -40,6 +41,7 @@ def get_training_parser(default_task="translation"):
     add_distributed_training_args(parser)
     add_model_args(parser)
     add_optimization_args(parser)
+    add_dual_optimizer_args(parser)
     add_checkpoint_args(parser)
     add_ema_args(parser)
     return parser
@@ -137,6 +139,9 @@ def parse_args_and_arch(
     # If input_args is given, we will parse those args instead of sys.argv.
     args, _ = parser.parse_known_args(input_args)
 
+    # import pprint
+    # pprint.pprint(vars(args))
+
     # Add model-specific args to parser.
     if hasattr(args, "arch"):
         model_specific_group = parser.add_argument_group(
@@ -178,13 +183,17 @@ def parse_args_and_arch(
     if modify_parser is not None:
         modify_parser(parser)
 
+
     # Parse a second time.
     if parse_known:
         args, extra = parser.parse_known_args(input_args)
     else:
-        args = parser.parse_args(input_args)
+        # import sys
+        # print("sys.argv:", sys.argv)
+        args = parser.parse_args(input_args) # TODO_THESIS: bug here, can not regcognize the args
         extra = None
     # Post-process args.
+
     if (
         hasattr(args, "batch_size_valid") and args.batch_size_valid is None
     ) or not hasattr(args, "batch_size_valid"):
@@ -201,7 +210,6 @@ def parse_args_and_arch(
         args.tpu = True
     if args.tpu and args.fp16:
         raise ValueError("Cannot combine --fp16 and --tpu, use --bf16 on TPUs")
-
     if getattr(args, "seed", None) is None:
         args.seed = 1  # default seed for training
         args.no_seed_provided = True
@@ -330,6 +338,13 @@ def add_optimization_args(parser):
     group = parser.add_argument_group("optimization")
     # fmt: off
     gen_parser_from_dataclass(group, OptimizationConfig())
+    # fmt: on
+    return group
+
+def add_dual_optimizer_args(parser):
+    group = parser.add_argument_group("dual_optimizer")
+    # fmt: off
+    gen_parser_from_dataclass(group, OptimizerConfig())
     # fmt: on
     return group
 
