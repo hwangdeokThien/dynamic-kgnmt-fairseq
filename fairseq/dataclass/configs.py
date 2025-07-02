@@ -639,6 +639,28 @@ class OptimizationConfig(FairseqDataclass):
     debug_param_names: bool = False
 
 
+# TODO_THESIS: extends setting for dual optimizers
+@dataclass
+class OptimizerConfig(FairseqDataclass):
+    # KGNMT optimizer settings
+    kgnmt_optimizer: str = field(default="adam", metadata={"help": "Optimizer for KGNMT"})
+    kgnmt_lr: float = field(default=0.0005, metadata={"help": "Learning rate for KGNMT"})
+    kgnmt_adam_betas: str = field(default="(0.9, 0.98)", metadata={"help": "Adam betas for KGNMT"})
+    kgnmt_weight_decay: float = field(default=0.0001, metadata={"help": "Weight decay for KGNMT"})
+    kgnmt_warmup_updates: int = field(default=0, metadata={"help": "Warmup updates for KGNMT"})
+    kgnmt_lr_scheduler: str = field(default="fixed", metadata={"help": "Learning rate scheduler for KGNMT"})
+    kgnmt_warmup_init_lr: float = field(default=-1, metadata={"help": "Initial learning rate during warmup phase for KGNMT"})
+    
+    # Selector optimizer settings
+    knowledge_selector_optimizer: str = field(default="adam", metadata={"help": "Optimizer for Knowledge Selector"})
+    knowledge_selector_lr: float = field(default=0.0001, metadata={"help": "Learning rate for Knowledge Selector"})
+    knowledge_selector_adam_betas: str = field(default="(0.9, 0.98)", metadata={"help": "Adam betas for Knowledge Selector"})
+    knowledge_selector_weight_decay: float = field(default=0.0001, metadata={"help": "Weight decay for Knowledge Selector"})
+    knowledge_selector_warmup_updates: int = field(default=0, metadata={"help": "Warmup updates for Knowledge Selector"})
+    knowledge_selector_lr_scheduler: str = field(default="fixed", metadata={"help": "Learning rate scheduler for Knowledge Selector"})
+    # knowledge_selector_warmup_init_lr: float = field(default=-1, metadata={"help": "Initial learning rate during warmup phase for Knowledge Selector"})
+
+
 @dataclass
 class CheckpointConfig(FairseqDataclass):
     save_dir: str = field(
