@@ -136,9 +136,6 @@ def collate(
         },
         "target": target,
     }
-    # print("TUNG TUNG TUNG SAHUR")
-    # print("Src tokens", batch["net_input"]["src_tokens"][0])
-    # print("Knw tokens", batch["net_input"]["knw_tokens"][0])
     if prev_output_tokens is not None:
         batch["net_input"]["prev_output_tokens"] = prev_output_tokens.index_select(
             0, sort_order
