@@ -10,13 +10,13 @@ import torch.nn as nn
 from torch import Tensor
 
 from fairseq import utils
-from fairseq.models.dynamic_kgnmt import KGNMTConfig
+from fairseq.models.dynamic_kgnmt import KgNMTConfig
 from fairseq.modules import LayerNorm, MultiheadAttention
 from fairseq.modules.fairseq_dropout import FairseqDropout
 from fairseq.modules.quant_noise import quant_noise
 
 
-class KGNMTEncoderLayerBase(nn.Module):
+class KgNMTEncoderLayerBase(nn.Module):
     """Encoder layer block.
 
     In the original paper each operation (multi-head attention or FFN) is
@@ -227,18 +227,18 @@ class KGNMTEncoderLayerBase(nn.Module):
 
 
 # backward compatible with the legacy argparse format
-class KGNMTEncoderLayer(KGNMTEncoderLayerBase):
+class KgNMTEncoderLayer(KgNMTEncoderLayerBase):
     def __init__(self, args):
-        super().__init__(KGNMTConfig.from_namespace(args))
+        super().__init__(KgNMTConfig.from_namespace(args))
         self.args = args
 
     def build_self_attention(self, embed_dim, args):
         return super().build_self_attention(
-            embed_dim, KGNMTConfig.from_namespace(args)
+            embed_dim, KgNMTConfig.from_namespace(args)
         )
 
 
-class KGNMTDecoderLayerBase(nn.Module):
+class KgNMTDecoderLayerBase(nn.Module):
     """Decoder layer block.
 
     In the original paper each operation (multi-head attention, encoder
@@ -578,12 +578,12 @@ class KGNMTDecoderLayerBase(nn.Module):
 
 
 # backward compatible with the legacy argparse format
-class KGNMTDecoderLayer(KGNMTDecoderLayerBase):
+class KgNMTDecoderLayer(KgNMTDecoderLayerBase):
     def __init__(
         self, args, no_encoder_attn=False, add_bias_kv=False, add_zero_attn=False
     ):
         super().__init__(
-            KGNMTConfig.from_namespace(args),
+            KgNMTConfig.from_namespace(args),
             no_encoder_attn=no_encoder_attn,
             add_bias_kv=add_bias_kv,
             add_zero_attn=add_zero_attn,
@@ -595,7 +595,7 @@ class KGNMTDecoderLayer(KGNMTDecoderLayerBase):
     ):
         return super().build_self_attention(
             embed_dim,
-            KGNMTConfig.from_namespace(args),
+            KgNMTConfig.from_namespace(args),
             add_bias_kv=add_bias_kv,
             add_zero_attn=add_zero_attn,
         )
@@ -603,5 +603,5 @@ class KGNMTDecoderLayer(KGNMTDecoderLayerBase):
     def build_encoder_attention(self, embed_dim, args):
         return super().build_encoder_attention(
             embed_dim,
-            KGNMTConfig.from_namespace(args),
+            KgNMTConfig.from_namespace(args),
         )
