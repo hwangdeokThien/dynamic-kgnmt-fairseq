@@ -31,7 +31,6 @@ from fairseq.data.indexed_dataset import get_available_dataset_impl
 from fairseq.dataclass import ChoiceEnum, FairseqDataclass
 from fairseq.tasks import FairseqTask, register_task
 from fairseq.optim.amp_optimizer import AMPOptimizer
-from fairseq.sequence_generator_knowledge_aug import SequenceGeneratorKnowledgeAug
 
 
 EVAL_BLEU_ORDER = 4
@@ -302,7 +301,7 @@ class TranslationDynamicKnowledgeAugConfig(FairseqDataclass):
         default=False, metadata={"help": "print sample generations during validation"}
     )
     sample_times: int = field(
-        default=30, metadata={"help": "sample triples times"}
+        default=15, metadata={"help": "sample triples times"}
     )
 
 
@@ -444,82 +443,11 @@ class TranslationKnowledgeAugTask(FairseqTask):
             )
 
             gen_args = json.loads(self.cfg.eval_bleu_args)
+            gen_args["sample_times"] = self.cfg.sample_times
             self.sequence_generator = self.build_generator( # TODO_THESIS: this is the sequence generator that maybe need to include knowledge graph data
                 [model], Namespace(**gen_args), knowledge_aug=True
             )
         return model
-    
-    # TODO_THESIS: train step of task
-    
-    # def train_step(
-    #     self, sample, knowledge_selector, kgnmt, criterion, knowledge_selector_optimizer, kgnmt_optimizer, update_num, ignore_grad=False
-    # ):
-    #     """
-    #     Do forward and backward, and return the loss as computed by *criterion*
-    #     for the given *model* and *sample*.
-
-    #     Args:
-    #         sample (dict): the mini-batch. The format is defined by the
-    #             :class:`~fairseq.data.FairseqDataset`.
-    #         model (~fairseq.models.BaseFairseqModel): the model
-    #         criterion (~fairseq.criterions.FairseqCriterion): the criterion
-    #         optimizer (~fairseq.optim.FairseqOptimizer): the optimizer
-    #         update_num (int): the current update
-    #         ignore_grad (bool): multiply loss by 0 if this is set to True
-
-    #     Returns:
-    #         tuple:
-    #             - the loss
-    #             - the sample size, which is used as the denominator for the
-    #               gradient
-    #             - logging outputs to display while training
-    #     """
-    #     # STEP 1: Fix kgnmt parameters, train knowledge selector
-    #     knowledge_selector.train()
-    #     kgnmt.eval()
-
-    #     knowledge_selector.set_num_updates(update_num)
-    #     with torch.autograd.profiler.record_function("forward"):
-    #         with torch.cuda.amp.autocast(enabled=(isinstance(knowledge_selector_optimizer, AMPOptimizer))):
-    #             net_input = sample["net_input"]
-    #             knowledge_selector_output = knowledge_selector(
-    #                     net_input["src_tokens"],
-    #                     net_input["src_lengths"],
-    #                     net_input["knw_tokens"],
-    #                     net_input["knw_lengths"],
-    #                     sample_times=self.cfg.sample_times if self.cfg.sample_times else 5,  # or hardcode e.g., 5
-    #             )
-    #             # TODO_THESIS: calculate reward from kgnmt_output, update knowledge selector
-    #             with torch.no_grad():
-    #                 knw_sel_reward = self.compute_log_prob_of_target(kgnmt, sample)  # shape: (B,)
-    #             log_p_t = knowledge_selector_output["log_p_t"]  # shape: (B,)
-    #             baseline = knw_sel_reward.mean()
-    #             knw_sel_loss = -((knw_sel_reward - baseline) * log_p_t).mean()
-
-    #             # TODO_THESIS: update the input for kgnmt to train using selected knowledge
-    #             sample["net_input"]["knw_tokens"] = knowledge_selector_output["selected_knw_tokens"]
-    #             sample["net_input"]["knw_lengths"] = knowledge_selector_output["selected_knw_lengths"]
-        
-    #     with torch.autograd.profiler.record_function("backward"):
-    #         knowledge_selector_optimizer.backward(knw_sel_loss)
-
-    #     # STEP 2: Fix knowledge selector parameters, train kgnmt
-    #     knowledge_selector.eval()
-    #     kgnmt.train()
-
-    #     kgnmt.set_num_updates(update_num)
-    #     with torch.autograd.profiler.record_function("forward"):
-    #         with torch.cuda.amp.autocast(enabled=(isinstance(kgnmt_optimizer, AMPOptimizer))):
-    #             loss, sample_size, logging_output = criterion(kgnmt, sample)
-    #     if ignore_grad:
-    #         loss *= 0
-    #     with torch.autograd.profiler.record_function("backward"):
-    #         kgnmt_optimizer.backward(loss)
-        
-    #     logging_output["knw_sel_reward"] = knw_sel_reward
-    #     logging_output["knw_sel_loss"] = knw_sel_loss
-        
-    #     return loss, sample_size, logging_output
 
     def train_step(
         self, sample, dynamic_kgnmt, criterion, knowledge_selector_optimizer, kgnmt_optimizer, update_num, ignore_grad=False
@@ -558,7 +486,7 @@ class TranslationKnowledgeAugTask(FairseqTask):
                         net_input["src_lengths"],
                         net_input["knw_tokens"],
                         net_input["knw_lengths"],
-                        sample_times=self.cfg.sample_times if self.cfg.sample_times else 5,  # or hardcode e.g., 5
+                        sample_times=self.cfg.sample_times if self.cfg.sample_times else 15,  # or hardcode e.g., 5
                 )
                 # TODO_THESIS: calculate reward from kgnmt_output, update knowledge selector
                 with torch.no_grad():
@@ -647,6 +575,18 @@ class TranslationKnowledgeAugTask(FairseqTask):
                 logging_output["_bleu_counts_" + str(i)] = bleu.counts[i]
                 logging_output["_bleu_totals_" + str(i)] = bleu.totals[i]
         return loss, sample_size, logging_output
+    
+    def bleu_valid_step(self, sample, model, logging_output):
+        bleu = self._inference_with_bleu(self.sequence_generator, sample, model)
+        logging_output["_bleu_sys_len"] = bleu.sys_len
+        logging_output["_bleu_ref_len"] = bleu.ref_len
+        # we split counts into separate entries so that they can be
+        # summed efficiently across workers using fast-stat-sync
+        assert len(bleu.counts) == EVAL_BLEU_ORDER
+        for i in range(EVAL_BLEU_ORDER):
+            logging_output["_bleu_counts_" + str(i)] = bleu.counts[i]
+            logging_output["_bleu_totals_" + str(i)] = bleu.totals[i]
+        return logging_output
 
     def reduce_metrics(self, logging_outputs, criterion):
         super().reduce_metrics(logging_outputs, criterion)

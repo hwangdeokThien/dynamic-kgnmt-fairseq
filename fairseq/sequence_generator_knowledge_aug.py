@@ -39,6 +39,7 @@ class SequenceGeneratorKnowledgeAug(nn.Module):
         lm_model=None,
         lm_weight=1.0,
         tokens_to_suppress=(),
+        sample_times=15,
     ):
         """Generates translations of a given source sentence.
 
@@ -105,6 +106,8 @@ class SequenceGeneratorKnowledgeAug(nn.Module):
         self.unk_penalty = unk_penalty
         self.temperature = temperature
         self.match_source_len = match_source_len
+
+        self.sample_times = sample_times
 
         if no_repeat_ngram_size > 0:
             self.repeat_ngram_blocker = NGramRepeatBlock(no_repeat_ngram_size)
@@ -279,7 +282,7 @@ class SequenceGeneratorKnowledgeAug(nn.Module):
         ), "min_len cannot be larger than max_len, please adjust these!"
         # compute the encoder output for each beam
         with torch.autograd.profiler.record_function("EnsembleModel: forward_encoder"):
-            encoder_outs, knw_encoder_outs = self.model.forward_encoder(net_input)
+            encoder_outs, knw_encoder_outs = self.model.forward_encoder(net_input, sample_times=self.sample_times)
 
         # placeholder of indices for bsz * beam_size to hold tokens and accumulative scores
         new_order = torch.arange(bsz).view(-1, 1).repeat(1, beam_size).view(-1)
@@ -356,10 +359,10 @@ class SequenceGeneratorKnowledgeAug(nn.Module):
                     original_batch_idxs = original_batch_idxs[batch_idxs]
                 self.model.reorder_incremental_state(incremental_states, reorder_state)
                 encoder_outs = self.model.reorder_encoder_out(
-                    encoder_outs, reorder_state
+                    encoder_outs, reorder_state, is_knw_encoder=False
                 )
                 knw_encoder_outs = self.model.reorder_encoder_out(
-                    knw_encoder_outs, reorder_state
+                    knw_encoder_outs, reorder_state, is_knw_encoder=True,
                 )
             with torch.autograd.profiler.record_function(
                 "EnsembleModel: forward_decoder"
@@ -777,7 +780,7 @@ class EnsembleModel(nn.Module):
 
         self.has_incremental: bool = False
         if all(
-            hasattr(m, "decoder") and isinstance(m.decoder, FairseqIncrementalDecoder)
+            hasattr(m.kgnmt, "decoder") and isinstance(m.kgnmt.decoder, FairseqIncrementalDecoder)
             for m in models
         ):
             self.has_incremental = True
@@ -786,7 +789,7 @@ class EnsembleModel(nn.Module):
         pass
 
     def has_encoder(self):
-        return hasattr(self.single_model, "encoder")
+        return hasattr(self.single_model.kgnmt, "encoder") or hasattr(self.single_model.kgnmt, "src_encoder") or hasattr(self.single_model.kgnmt, "knw_encoder")
 
     def has_incremental_states(self):
         return self.has_incremental
@@ -808,10 +811,45 @@ class EnsembleModel(nn.Module):
                 if hasattr(model, "set_beam_size"):
                     model.set_beam_size(beam_size)
 
+    # @torch.jit.export
+    # def forward_encoder(self, net_input: Dict[str, Tensor]):
+    #     if not self.has_encoder():
+    #         print("Seq Generator - No encoder")
+    #         return None
+
+    #     src_input = {
+    #         "src_tokens": net_input["src_tokens"],
+    #         "src_lengths": net_input["src_lengths"],
+    #     }
+    #     knw_input = {
+    #         "src_tokens": net_input["knw_tokens"],
+    #         "src_lengths": net_input["knw_lengths"],
+    #     }
+
+    #     src_encoder_outs = [
+    #         model.encoder.forward_torchscript(src_input) for model in self.models
+    #     ]
+    #     print("Seq Generator - Src encoder outs:", src_encoder_outs)
+    #     knw_encoder_outs = [
+    #         model.knw_encoder.forward_torchscript(knw_input) for model in self.models
+    #     ]
+    #     print("Seq Generator - Knw encoder outs:", knw_encoder_outs)
+
+    #     return (src_encoder_outs, knw_encoder_outs)
+    
     @torch.jit.export
-    def forward_encoder(self, net_input: Dict[str, Tensor]):
-        if not self.has_encoder():
-            return None
+    def forward_encoder(self, net_input: Dict[str, Tensor], sample_times=15):
+        selector_output = self.single_model.knowledge_selector(
+            src_tokens=net_input["src_tokens"],
+            src_lengths=net_input["src_lengths"],
+            knw_tokens=net_input["knw_tokens"],
+            knw_lengths=net_input["knw_lengths"],
+            sample_times=sample_times,
+            return_all_hiddens=True
+        )
+
+        net_input["knw_tokens"] = selector_output["selected_knw_tokens"]
+        net_input["knw_lengths"] = selector_output["selected_knw_lengths"]
 
         src_input = {
             "src_tokens": net_input["src_tokens"],
@@ -822,12 +860,8 @@ class EnsembleModel(nn.Module):
             "src_lengths": net_input["knw_lengths"],
         }
 
-        src_encoder_outs = [
-            model.encoder.forward_torchscript(src_input) for model in self.models
-        ]
-        knw_encoder_outs = [
-            model.knw_encoder.forward_torchscript(knw_input) for model in self.models
-        ]
+        src_encoder_outs = [self.single_model.kgnmt.encoder.forward_torchscript(src_input)]
+        knw_encoder_outs = [self.single_model.kgnmt.knw_encoder.forward_torchscript(knw_input)] 
 
         return (src_encoder_outs, knw_encoder_outs)
 
@@ -850,15 +884,15 @@ class EnsembleModel(nn.Module):
                 knw_encoder_out = knw_encoder_outs[i]
             # decode each model
             if self.has_incremental_states():
-                decoder_out = model.decoder.forward(
+                decoder_out = model.kgnmt.decoder.forward(
                     tokens,
                     encoder_out=encoder_out,
                     knw_encoder_out=knw_encoder_out,
                     incremental_state=incremental_states[i],
                 )
             else:
-                if hasattr(model, "decoder"):
-                    decoder_out = model.decoder.forward(
+                if hasattr(model.kgnmt, "decoder"):
+                    decoder_out = model.kgnmt.decoder.forward(
                         tokens, 
                         encoder_out=encoder_out, 
                         knw_encoder_out=knw_encoder_out
@@ -884,7 +918,7 @@ class EnsembleModel(nn.Module):
                 decoder_out[0][:, -1:, :].div_(temperature),
                 None if decoder_len <= 1 else decoder_out[1],
             )
-            probs = model.get_normalized_probs(
+            probs = model.kgnmt.get_normalized_probs(
                 decoder_out_tuple, log_probs=True, sample=None
             )
             probs = probs[:, -1, :]
@@ -908,7 +942,7 @@ class EnsembleModel(nn.Module):
 
     @torch.jit.export
     def reorder_encoder_out(
-        self, encoder_outs: Optional[List[Dict[str, List[Tensor]]]], new_order
+        self, encoder_outs: Optional[List[Dict[str, List[Tensor]]]], new_order, is_knw_encoder=False
     ):
         """
         Reorder encoder output according to *new_order*.
@@ -925,9 +959,14 @@ class EnsembleModel(nn.Module):
             return new_outs
         for i, model in enumerate(self.models):
             assert encoder_outs is not None
-            new_outs.append(
-                model.encoder.reorder_encoder_out(encoder_outs[i], new_order)
-            )
+            if is_knw_encoder:
+                new_outs.append(
+                    model.kgnmt.knw_encoder.reorder_encoder_out(encoder_outs[i], new_order)
+                )
+            else:
+                new_outs.append(
+                    model.kgnmt.encoder.reorder_encoder_out(encoder_outs[i], new_order)
+                )
         return new_outs
 
     @torch.jit.export
@@ -939,7 +978,7 @@ class EnsembleModel(nn.Module):
         if not self.has_incremental_states():
             return
         for i, model in enumerate(self.models):
-            model.decoder.reorder_incremental_state_scripting(
+            model.kgnmt.decoder.reorder_incremental_state_scripting(
                 incremental_states[i], new_order
             )
 

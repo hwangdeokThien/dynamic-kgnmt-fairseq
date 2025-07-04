@@ -379,6 +379,7 @@ class FairseqTask(object):
         args,
         seq_gen_cls=None,
         knowledge_aug=False,
+        sample_times=15,
         extra_gen_cls_kwargs=None,
         prefix_allowed_tokens_fn=None,
     ):
@@ -508,6 +509,7 @@ class FairseqTask(object):
             no_repeat_ngram_size=getattr(args, "no_repeat_ngram_size", 0),
             search_strategy=search_strategy,
             **extra_gen_cls_kwargs,
+            sample_times=sample_times
         )
 
     def train_step(
