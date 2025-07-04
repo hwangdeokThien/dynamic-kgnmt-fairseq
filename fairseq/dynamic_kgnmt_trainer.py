@@ -327,11 +327,6 @@ class DynamicKgNMTTrainer(object):
         ks_optim_cfg = OmegaConf.create(ks_optim_cfg)
         self._knowledge_selector_optimizer = optim.build_optimizer(ks_optim_cfg, params)
 
-        # self._knowledge_selector_optimizer = optim.build_optimizer(
-        #     self.cfg.optimization,
-        #     params,
-        # )
-
     def _build_kgnmt_optimizer(self):
         """Build optimizer for KG-NMT component."""
         params = list(filter(
@@ -1039,14 +1034,6 @@ class DynamicKgNMTTrainer(object):
         self.model.knowledge_selector.train()
 
         with torch.cuda.amp.autocast(enabled=isinstance(self.knowledge_selector_optimizer, AMPOptimizer)):
-            # src_dict, knw_dict = self.task.source_dictionary, self.task.knowledge_dictionary
-            # print("Src tokens: ", end=" ")
-            # for e in sample["net_input"]["src_tokens"][0]:
-            #     print(src_dict[e], end=" ")
-            # print("\n")
-            # print("Knw tokens: ", end=" ")
-            # for e in sample["net_input"]["knw_tokens"][0]:
-            #     print(knw_dict[e], end=" ")
             ks_output = self.model.knowledge_selector(
                 sample["net_input"]["src_tokens"],
                 sample["net_input"]["src_lengths"],
@@ -1128,21 +1115,70 @@ class DynamicKgNMTTrainer(object):
         log_prob_per_sample = (lprobs_for_target * pad_mask).sum(dim=1)
         return log_prob_per_sample
 
+    # @metrics.aggregate("valid")
+    # def valid_step(self, sample, raise_oom=False):
+    #     """Do forward pass in evaluation mode."""
+    #     if self.tpu:
+    #         import torch_xla.core.xla_model as xm
+
+    #         xm.rendezvous("valid_step")  # wait for all workers
+
+    #     # If EMA is enabled through store_ema=True
+    #     # and task.uses_ema is True, pass the EMA model as a keyword
+    #     # argument to the task.
+    #     extra_kwargs = {}
+    #     if self.cfg.ema.store_ema and getattr(self.task, "uses_ema", False):
+    #         extra_kwargs["ema_model"] = self.ema.get_model()
+
+    #     with torch.no_grad():
+    #         self.model.eval()
+    #         self.criterion.eval()
+
+    #         sample, is_dummy_batch = self._prepare_sample(sample)
+
+    #         try:
+    #             _loss, sample_size, logging_output = self.task.valid_step(
+    #                 sample, self.model, self.criterion, **extra_kwargs
+    #             )
+    #         except RuntimeError as e:
+    #             if "out of memory" in str(e):
+    #                 self._log_oom(e)
+    #                 if not raise_oom:
+    #                     logger.warning(
+    #                         "ran out of memory in validation step, retrying batch"
+    #                     )
+    #                     for p in self.model.parameters():
+    #                         if p.grad is not None:
+    #                             p.grad = None  # free some memory
+    #                     if self.cuda:
+    #                         torch.cuda.empty_cache()
+    #                     return self.valid_step(sample, raise_oom=True)
+    #             raise e
+
+    #         logging_outputs = [logging_output]
+    #         if is_dummy_batch:
+    #             if torch.is_tensor(sample_size):
+    #                 sample_size.zero_()
+    #             else:
+    #                 sample_size *= 0.0
+
+    #     # gather logging outputs from all replicas
+    #     if self.data_parallel_world_size > 1:
+    #         logging_outputs, (sample_size,) = self._aggregate_logging_outputs(
+    #             logging_outputs,
+    #             sample_size,
+    #             ignore=is_dummy_batch,
+    #         )
+
+    #     # log validation stats
+    #     if self.tpu:
+    #         logging_outputs = self._xla_markstep_and_send_to_cpu(logging_outputs)
+    #     logging_output = self._reduce_and_log_stats(logging_outputs, sample_size)
+
+    #     return logging_output
+
     @metrics.aggregate("valid")
     def valid_step(self, sample, raise_oom=False):
-        """Do forward pass in evaluation mode."""
-        if self.tpu:
-            import torch_xla.core.xla_model as xm
-
-            xm.rendezvous("valid_step")  # wait for all workers
-
-        # If EMA is enabled through store_ema=True
-        # and task.uses_ema is True, pass the EMA model as a keyword
-        # argument to the task.
-        extra_kwargs = {}
-        if self.cfg.ema.store_ema and getattr(self.task, "uses_ema", False):
-            extra_kwargs["ema_model"] = self.ema.get_model()
-
         with torch.no_grad():
             self.model.eval()
             self.criterion.eval()
@@ -1150,45 +1186,85 @@ class DynamicKgNMTTrainer(object):
             sample, is_dummy_batch = self._prepare_sample(sample)
 
             try:
-                _loss, sample_size, logging_output = self.task.valid_step(
-                    sample, self.model, self.criterion, **extra_kwargs
+                # === 1. Run KnowledgeSelector to get selected knowledge tokens ===
+                selector_output = self.model.knowledge_selector(
+                    src_tokens=sample["net_input"]["src_tokens"],
+                    src_lengths=sample["net_input"]["src_lengths"],
+                    knw_tokens=sample["net_input"]["knw_tokens"],
+                    knw_lengths=sample["net_input"]["knw_lengths"],
+                    sample_times=getattr(self.cfg.task, "sample_times", 5),
+                    return_all_hiddens=True
                 )
+
+                # === 2. Replace knw_tokens and knw_lengths in sample with selected ones ===
+                sample["net_input"]["knw_tokens"] = selector_output["selected_knw_tokens"]
+                sample["net_input"]["knw_lengths"] = selector_output["selected_knw_lengths"]
+
+                # === 3. Forward through KgNMT only ===
+                net_output = self.model.kgnmt(**sample["net_input"])
+
+                # === 4. Compute loss ===
+                loss, nll_loss = self.criterion.compute_loss(
+                    self.model.kgnmt, net_output, sample, reduce=True
+                )
+                sample_size = (
+                    sample["target"].size(0) if self.criterion.sentence_avg else sample["ntokens"]
+                )
+                logging_output = {
+                    "loss": loss.data,
+                    "nll_loss": nll_loss.data,
+                    "ntokens": sample["ntokens"],
+                    "nsentences": sample["target"].size(0),
+                    "sample_size": sample_size,
+                }
+
+                # === 5. If BLEU is enabled, compute BLEU score ===
+                if self.cfg.task.eval_bleu:
+                    # bleu = self.task._inference_with_bleu(self.sequence_generator, sample, self.model)
+                    # logging_output["_bleu_sys_len"] = bleu.sys_len
+                    # logging_output["_bleu_ref_len"] = bleu.ref_len
+
+                    # # Split counts and totals for efficient summing
+                    # EVAL_BLEU_ORDER = 4
+                    # assert len(bleu.counts) == EVAL_BLEU_ORDER
+                    # for i in range(EVAL_BLEU_ORDER):
+                    #     logging_output["_bleu_counts_" + str(i)] = bleu.counts[i]
+                    #     logging_output["_bleu_totals_" + str(i)] = bleu.totals[i]
+                    logging_output = self.task.bleu_valid_step(sample, self.model, logging_output)
+
+                # === 6. If accuracy reporting is enabled, compute accuracy ===
+                if getattr(self.criterion, "report_accuracy", False):
+                    n_correct, total = self.criterion.compute_accuracy(
+                        self.model.kgnmt, net_output, sample
+                    )
+                    logging_output["n_correct"] = utils.item(n_correct)
+                    logging_output["total"] = utils.item(total)
+
             except RuntimeError as e:
                 if "out of memory" in str(e):
                     self._log_oom(e)
                     if not raise_oom:
-                        logger.warning(
-                            "ran out of memory in validation step, retrying batch"
-                        )
+                        logger.warning("OOM during valid_step, retrying batch")
                         for p in self.model.parameters():
                             if p.grad is not None:
-                                p.grad = None  # free some memory
+                                p.grad = None
                         if self.cuda:
                             torch.cuda.empty_cache()
                         return self.valid_step(sample, raise_oom=True)
                 raise e
 
+            # === 7. Reduce & return ===
             logging_outputs = [logging_output]
             if is_dummy_batch:
-                if torch.is_tensor(sample_size):
-                    sample_size.zero_()
-                else:
-                    sample_size *= 0.0
+                sample_size = 0 if not torch.is_tensor(sample_size) else sample_size.zero_()
 
-        # gather logging outputs from all replicas
-        if self.data_parallel_world_size > 1:
-            logging_outputs, (sample_size,) = self._aggregate_logging_outputs(
-                logging_outputs,
-                sample_size,
-                ignore=is_dummy_batch,
-            )
+            if self.data_parallel_world_size > 1:
+                logging_outputs, (sample_size,) = self._aggregate_logging_outputs(
+                    logging_outputs, sample_size, ignore=is_dummy_batch
+                )
 
-        # log validation stats
-        if self.tpu:
-            logging_outputs = self._xla_markstep_and_send_to_cpu(logging_outputs)
-        logging_output = self._reduce_and_log_stats(logging_outputs, sample_size)
-
-        return logging_output
+            logging_output = self._reduce_and_log_stats(logging_outputs, sample_size)
+            return logging_output
 
     def zero_grad(self):
         self.knowledge_selector_optimizer.zero_grad()
