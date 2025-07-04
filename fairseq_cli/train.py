@@ -217,7 +217,8 @@ def main(cfg: FairseqConfig) -> None:
             break
 
         # only use first validation loss to update the learning rate
-        lr = trainer.lr_step(epoch_itr.epoch, valid_losses[0])
+        ks_lr, kgnmt_lr = trainer.lr_step(epoch_itr.epoch, valid_losses[0])
+        lr = kgnmt_lr
 
         epoch_itr = trainer.get_train_iterator(
             epoch_itr.next_epoch_idx,
@@ -535,6 +536,7 @@ def validate(
         # only tracking the best metric on the 1st validation subset
         tracking_best = subset_idx == 0
         stats = get_valid_stats(cfg, trainer, agg.get_smoothed_values(), tracking_best)
+        print(stats)
 
         if hasattr(task, "post_validate"):
             task.post_validate(trainer.get_model(), stats, agg)
