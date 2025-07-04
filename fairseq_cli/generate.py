@@ -164,8 +164,11 @@ def _main(cfg: DictConfig, output_file):
     gen_timer = StopwatchMeter()
 
     extra_gen_cls_kwargs = {"lm_model": lms[0], "lm_weight": cfg.generation.lm_weight}
+    # generator = task.build_generator(
+    #     models, cfg.generation, extra_gen_cls_kwargs=extra_gen_cls_kwargs,
+    # )
     generator = task.build_generator(
-        models, cfg.generation, extra_gen_cls_kwargs=extra_gen_cls_kwargs
+        models, cfg.generation, extra_gen_cls_kwargs=extra_gen_cls_kwargs, knowledge_aug=True
     )
 
     # Handle tokenization and BPE
