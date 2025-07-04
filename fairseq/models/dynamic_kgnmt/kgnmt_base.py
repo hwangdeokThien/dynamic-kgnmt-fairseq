@@ -119,7 +119,6 @@ class KgNMTModelBase(BaseFairseqModel):
             decoder_embed_tokens = encoder_embed_tokens
             cfg.share_decoder_input_output_embed = True
         else:
-            print(cfg)
             encoder_embed_tokens = cls.build_embedding(
                 cfg, src_dict, cfg.encoder.embed_dim, cfg.encoder.embed_path
             )
