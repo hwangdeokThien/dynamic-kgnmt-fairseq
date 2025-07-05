@@ -1025,8 +1025,8 @@ class DynamicKgNMTTrainer(object):
                 metrics.log_scalar(f"loss_scale_{name}", opt.scaler.get_scale(), priority=700, round=4, weight=0)
 
         # Final log & return
+        print("Logging outputs at 1028:", logging_outputs)
         logging_output = self._reduce_and_log_stats(logging_outputs, sample_size_total)
-        print("Logging outputs at 1029:", logging_output)
         metrics.log_stop_time("train_wall")
         return logging_output
     
