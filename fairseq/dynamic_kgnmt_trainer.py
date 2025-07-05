@@ -968,33 +968,31 @@ class DynamicKgNMTTrainer(object):
 
             try:
                 with maybe_no_sync():
-                    print("Starting epoch")
                     # Phase 1: Train knowledge selector
                     ks_loss, reward, modified_sample = self._train_knowledge_selector_phase(sample, is_dummy_batch)
 
                     # Phase 2: Train KG-NMT
                     kgnmt_loss, sample_size, kgnmt_logging_output = self._train_kgnmt_phase(modified_sample, is_dummy_batch)
 
-                    print("Creating logging output")
                     logging_output = {
                         **kgnmt_logging_output,
                         "knw_sel_reward": reward.mean().item(),
                         "knw_sel_loss": ks_loss.item(),
                         "sample_size": sample_size
                     }
-                    print("Logging output at 983:", logging_output)
                     logging_outputs.append(logging_output)
                     sample_size_total += sample_size
 
                     if self.cuda and self.get_num_updates() == 0:
                         torch.cuda.empty_cache()
 
-            except RuntimeError as e:
+            except Exception as e:
                 self.consolidate_optimizer()
                 self.save_checkpoint(
                     os.path.join(self.cfg.checkpoint.save_dir, "crash.pt"), {}
                 )
-                if "out of memory" in str(e):
+
+                if isinstance(e, RuntimeError) and "out of memory" in str(e):
                     self._log_oom(e)
                     has_oom = True
                     if raise_oom:
@@ -1029,7 +1027,6 @@ class DynamicKgNMTTrainer(object):
                 metrics.log_scalar(f"loss_scale_{name}", opt.scaler.get_scale(), priority=700, round=4, weight=0)
 
         # Final log & return
-        print("Logging outputs at 1028:", logging_outputs)
         logging_output = self._reduce_and_log_stats(logging_outputs, sample_size_total)
         metrics.log_stop_time("train_wall")
         return logging_output
@@ -1634,7 +1631,7 @@ class DynamicKgNMTTrainer(object):
 
         with metrics.aggregate() as agg:
             if logging_outputs is not None:
-                print("Logging outputs at 1630:", logging_outputs)
+                print("Logging outputs:", logging_outputs)
                 self.task.reduce_metrics(logging_outputs, self.get_criterion())
                 del logging_outputs
 
