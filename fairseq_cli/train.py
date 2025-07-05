@@ -536,7 +536,6 @@ def validate(
         # only tracking the best metric on the 1st validation subset
         tracking_best = subset_idx == 0
         stats = get_valid_stats(cfg, trainer, agg.get_smoothed_values(), tracking_best)
-        print(stats)
 
         if hasattr(task, "post_validate"):
             task.post_validate(trainer.get_model(), stats, agg)
