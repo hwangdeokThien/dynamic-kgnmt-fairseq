@@ -37,7 +37,7 @@ CUDA_VISIBLE_DEVICES=0,1 fairseq-train "$BIN_DIR" \
   --arch dynamic_kgnmt_iwslt_vi_en \
   --criterion label_smoothed_cross_entropy \
   --label-smoothing 0.1 \
-  --max-tokens 8192 \
+  --max-tokens 4096 \
   --max-epoch 60 \
   --max-update 100000 \
   --eval-bleu \
