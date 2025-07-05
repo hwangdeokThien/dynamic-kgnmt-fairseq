@@ -968,20 +968,21 @@ class DynamicKgNMTTrainer(object):
 
             try:
                 with maybe_no_sync():
-                    print("Having sync")
+                    print("Starting epoch")
                     # Phase 1: Train knowledge selector
                     ks_loss, reward, modified_sample = self._train_knowledge_selector_phase(sample, is_dummy_batch)
 
                     # Phase 2: Train KG-NMT
                     kgnmt_loss, sample_size, kgnmt_logging_output = self._train_kgnmt_phase(modified_sample, is_dummy_batch)
 
+                    print("Creating logging output")
                     logging_output = {
                         **kgnmt_logging_output,
                         "knw_sel_reward": reward.mean().item(),
                         "knw_sel_loss": ks_loss.item(),
                         "sample_size": sample_size
                     }
-                    print("Logging output at 983",logging_output)
+                    print("Logging output at 983:", logging_output)
                     logging_outputs.append(logging_output)
                     sample_size_total += sample_size
 
@@ -1034,6 +1035,7 @@ class DynamicKgNMTTrainer(object):
         return logging_output
     
     def _train_knowledge_selector_phase(self, sample, is_dummy_batch):
+        print("Traing knowledge selector phase")
         self.model.kgnmt.eval()
         self.model.knowledge_selector.train()
 
@@ -1070,6 +1072,7 @@ class DynamicKgNMTTrainer(object):
         return loss, reward, modified_sample
 
     def _train_kgnmt_phase(self, sample, is_dummy_batch):
+        print("Traing kgnmt phase")
         self.model.knowledge_selector.eval()
         self.model.kgnmt.train()
 
