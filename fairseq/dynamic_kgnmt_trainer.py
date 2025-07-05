@@ -955,6 +955,7 @@ class DynamicKgNMTTrainer(object):
         logging_outputs, sample_size_total, ooms = [], 0, 0
 
         for i, sample in enumerate(samples):
+            print("Loading samples")
             sample, is_dummy_batch = self._prepare_sample(sample)
 
             def maybe_no_sync():
@@ -979,6 +980,7 @@ class DynamicKgNMTTrainer(object):
                         "knw_sel_loss": ks_loss.item(),
                         "sample_size": sample_size
                     }
+                    print("Logging output at 983",logging_output)
                     logging_outputs.append(logging_output)
                     sample_size_total += sample_size
 
