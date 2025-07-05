@@ -1026,6 +1026,7 @@ class DynamicKgNMTTrainer(object):
 
         # Final log & return
         logging_output = self._reduce_and_log_stats(logging_outputs, sample_size_total)
+        print("Logging outputs at 1029:", logging_output)
         metrics.log_stop_time("train_wall")
         return logging_output
     
@@ -1627,6 +1628,7 @@ class DynamicKgNMTTrainer(object):
 
         with metrics.aggregate() as agg:
             if logging_outputs is not None:
+                print("Logging outputs at 1630:", logging_outputs)
                 self.task.reduce_metrics(logging_outputs, self.get_criterion())
                 del logging_outputs
 
