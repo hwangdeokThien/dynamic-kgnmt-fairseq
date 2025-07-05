@@ -10,7 +10,7 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # === Configuration ===
 SRC=en
 TGT=vi
-VOCAB_SIZE=16000
+VOCAB_SIZE=12000
 MODEL_PREFIX=$SCRIPT_DIR/tokenizer/envi
 DATA_DIR=$SCRIPT_DIR/kgnmt_data
 BIN_DIR=$SCRIPT_DIR/data-bin/envi-bpe
