@@ -1035,6 +1035,7 @@ class DynamicKgNMTTrainer(object):
         print("Traing knowledge selector phase")
         self.model.kgnmt.eval()
         self.model.knowledge_selector.train()
+        print("corrupt 1")
 
         with torch.cuda.amp.autocast(enabled=isinstance(self.knowledge_selector_optimizer, AMPOptimizer)):
             ks_output = self.model.knowledge_selector(
@@ -1050,6 +1051,7 @@ class DynamicKgNMTTrainer(object):
             baseline = reward.mean()
             loss = -((reward - baseline) * ks_output["log_p_t"]).mean()
 
+        print("corrupt 2")
         self.knowledge_selector_optimizer.backward(loss)
 
         if not is_dummy_batch:
@@ -1061,6 +1063,7 @@ class DynamicKgNMTTrainer(object):
             )
             self.knowledge_selector_optimizer.step()
             self.knowledge_selector_optimizer.zero_grad()
+        print("corrupt 3")
 
         modified_sample = sample.copy()
         modified_sample["net_input"]["knw_tokens"] = ks_output["selected_knw_tokens"]
@@ -1631,7 +1634,6 @@ class DynamicKgNMTTrainer(object):
 
         with metrics.aggregate() as agg:
             if logging_outputs is not None:
-                print("Logging outputs:", logging_outputs)
                 self.task.reduce_metrics(logging_outputs, self.get_criterion())
                 del logging_outputs
 
