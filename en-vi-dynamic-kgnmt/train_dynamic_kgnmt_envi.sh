@@ -30,10 +30,8 @@ else
 fi
 
 # === Train the model ===
-# CUDA_VISIBLE_DEVICES=0,1 fairseq-train "$BIN_DIR" \
-#   --distributed-world-size 2 \
-
-fairseq-train "$BIN_DIR" \
+CUDA_VISIBLE_DEVICES=0,1 fairseq-train "$BIN_DIR" \
+  --distributed-world-size 2 \
   --ddp-backend no_c10d \
   --task translation_dynamic_knowledge_aug \
   --arch dynamic_kgnmt_iwslt_vi_en \
