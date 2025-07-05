@@ -968,6 +968,7 @@ class DynamicKgNMTTrainer(object):
 
             try:
                 with maybe_no_sync():
+                    print("Having sync")
                     # Phase 1: Train knowledge selector
                     ks_loss, reward, modified_sample = self._train_knowledge_selector_phase(sample, is_dummy_batch)
 
