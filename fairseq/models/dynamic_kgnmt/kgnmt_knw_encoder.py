@@ -231,12 +231,14 @@ class KgNMTKnowledgeEncoderBase(FairseqEncoder):
         if return_all_hiddens:
             encoder_states.append(x)
 
+        print("I'm about to go to the layers")
         # encoder layers
         for layer in self.layers:
             lr = layer(
                 x, encoder_padding_mask=encoder_padding_mask if has_pads else None
             )
 
+            print("proceed it to the next layer")
             if isinstance(lr, tuple) and len(lr) == 2:
                 x, fc_result = lr
             else:
@@ -262,6 +264,8 @@ class KgNMTKnowledgeEncoderBase(FairseqEncoder):
             .contiguous()
         )
 
+        print("I'm here let's go")
+
         triple_indices = torch.zeros_like(src_tokens, dtype=torch.long)
         if knw_sep:
             # 1 where token is <k>, 0 otherwise, ignoring pads
@@ -273,6 +277,8 @@ class KgNMTKnowledgeEncoderBase(FairseqEncoder):
             triple_indices = triple_indices.transpose(0, 1)  # T x B
         else:
             triple_indices = triple_indices.transpose(0, 1)  # T x B (all 0s)
+
+        print("Calculating indices right")
 
         return {
             "encoder_out": [x],  # T x B x C

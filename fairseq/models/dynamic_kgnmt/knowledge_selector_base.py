@@ -131,17 +131,15 @@ class KnowledgeSelectorBase(BaseFairseqModel):
         and score each triple with softmax probability.
         """
 
-        print("I go here 1")
         # Encode source (with <s> at beginning)
         encoder_out = self.encoder(
             src_tokens, src_lengths=src_lengths, return_all_hiddens=return_all_hiddens
         )
         src_enc = encoder_out["encoder_out"][0]  # (T_src, B, C)
         c_s = src_enc[0]  # (B, C) - representation of <s>
-        print("I go here 2")
 
+        # BUG: from here - about distributed training
         # Encode knowledge
-        print("I go here 3")
         knw_encoder_out = self.knw_encoder(
             knw_tokens,
             src_lengths=knw_lengths,
@@ -150,7 +148,7 @@ class KnowledgeSelectorBase(BaseFairseqModel):
         )
         knw_enc = knw_encoder_out["encoder_out"][0]  # (T_knw, B, C)
         knw_enc = knw_enc.transpose(0, 1)  # (B, T_knw, C)
-        print("KNW enc shape: ", knw_enc.shape)
+        # to here
 
         # Triple indices: (B, T_knw) → each token's triple id
         triple_indices = knw_encoder_out["triple_indices"][0].transpose(0, 1)  # (B, T_knw)
