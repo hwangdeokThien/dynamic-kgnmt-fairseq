@@ -15,7 +15,6 @@ MODEL_PREFIX=$SCRIPT_DIR/tokenizer/envi
 DATA_DIR=$SCRIPT_DIR/kgnmt_data
 BIN_DIR=$SCRIPT_DIR/data-bin/envi-bpe
 SP_MODEL=$MODEL_PREFIX.model
-NUM_WORKERS=4
 CHECKPOINT_DIR=$SCRIPT_DIR/checkpoints/envi-dynamic-kgnmt
 CHECKPOINT_FILE=$CHECKPOINT_DIR/checkpoint_latest.pt  # Path to the latest checkpoint
 

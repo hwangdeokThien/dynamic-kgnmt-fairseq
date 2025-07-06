@@ -50,7 +50,7 @@ fairseq-preprocess \
   --testpref  $SPM_DATA_DIR/test.spm \
   --destdir $OUT_DIR \
   --joined-dictionary \
-  --workers 4
+  --workers 20
 
 fairseq-preprocess \
   --source-lang $KG --target-lang $KG \
@@ -59,7 +59,7 @@ fairseq-preprocess \
   --testpref  $SPM_DATA_DIR/test.spm \
   --destdir $OUT_DIR \
   --joined-dictionary \
-  --workers 4
+  --workers 20
 
 mv $OUT_DIR/train.kg-kg.kg.bin $OUT_DIR/train.en-vi.kg.bin
 mv $OUT_DIR/valid.kg-kg.kg.bin $OUT_DIR/valid.en-vi.kg.bin
