@@ -131,8 +131,6 @@ class LabelSmoothedCrossEntropyCriterion(FairseqCriterion):
         nll_loss_sum = sum(log.get("nll_loss", 0) for log in logging_outputs)
         ntokens = sum(log.get("ntokens", 0) for log in logging_outputs)
         sample_size = sum(log.get("sample_size", 0) for log in logging_outputs)
-        print("Logging outputs:", logging_outputs)
-        print("Sample size:", sample_size)
 
         metrics.log_scalar(
             "loss", loss_sum / sample_size / math.log(2), sample_size, round=3

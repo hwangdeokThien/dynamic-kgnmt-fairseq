@@ -183,7 +183,6 @@ class KnowledgeSelectorBase(BaseFairseqModel):
             padding_idx=self.encoder.padding_idx  # or whatever you use
         )
 
-        print("I go here 4")
         log_probs = torch.log(probs + 1e-8)  # (B, Z), add epsilon for stability
 
         # selected_triple_ids: (B, sample_times)

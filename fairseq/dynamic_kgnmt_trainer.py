@@ -955,7 +955,6 @@ class DynamicKgNMTTrainer(object):
         logging_outputs, sample_size_total, ooms = [], 0, 0
 
         for i, sample in enumerate(samples):
-            print("Loading samples")
             sample, is_dummy_batch = self._prepare_sample(sample)
 
             def maybe_no_sync():
@@ -1032,10 +1031,8 @@ class DynamicKgNMTTrainer(object):
         return logging_output
     
     def _train_knowledge_selector_phase(self, sample, is_dummy_batch):
-        print("Traing knowledge selector phase")
         self.model.kgnmt.eval()
         self.model.knowledge_selector.train()
-        print("corrupt 1")
 
         with torch.cuda.amp.autocast(enabled=isinstance(self.knowledge_selector_optimizer, AMPOptimizer)):
             ks_output = self.model.knowledge_selector(
@@ -1051,7 +1048,6 @@ class DynamicKgNMTTrainer(object):
             baseline = reward.mean()
             loss = -((reward - baseline) * ks_output["log_p_t"]).mean()
 
-        print("corrupt 2")
         self.knowledge_selector_optimizer.backward(loss)
 
         if not is_dummy_batch:
@@ -1063,7 +1059,6 @@ class DynamicKgNMTTrainer(object):
             )
             self.knowledge_selector_optimizer.step()
             self.knowledge_selector_optimizer.zero_grad()
-        print("corrupt 3")
 
         modified_sample = sample.copy()
         modified_sample["net_input"]["knw_tokens"] = ks_output["selected_knw_tokens"]
@@ -1072,7 +1067,6 @@ class DynamicKgNMTTrainer(object):
         return loss, reward, modified_sample
 
     def _train_kgnmt_phase(self, sample, is_dummy_batch):
-        print("Traing kgnmt phase")
         self.model.knowledge_selector.eval()
         self.model.kgnmt.train()
 
