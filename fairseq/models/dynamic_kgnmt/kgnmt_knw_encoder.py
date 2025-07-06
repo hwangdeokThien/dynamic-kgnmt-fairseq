@@ -233,7 +233,8 @@ class KgNMTKnowledgeEncoderBase(FairseqEncoder):
 
         print("I'm about to go to the layers")
         # encoder layers
-        for layer in self.layers:
+        for i, layer in enumerate(self.layers):
+            print("Processing layer", i+1, "/", len(self.layers))
             lr = layer(
                 x, encoder_padding_mask=encoder_padding_mask if has_pads else None
             )
@@ -244,11 +245,14 @@ class KgNMTKnowledgeEncoderBase(FairseqEncoder):
             else:
                 x = lr
                 fc_result = None
-
+            
+            print("x shape is", x.shape)
             if return_all_hiddens and not torch.jit.is_scripting():
                 assert encoder_states is not None
                 encoder_states.append(x)
                 fc_results.append(fc_result)
+
+        print("out of the loop baby")
 
         if self.layer_norm is not None:
             x = self.layer_norm(x)
