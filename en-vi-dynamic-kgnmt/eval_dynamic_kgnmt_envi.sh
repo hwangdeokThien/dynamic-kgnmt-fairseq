@@ -9,7 +9,7 @@ SRC=en
 TGT=vi
 DATA_DIR=$SCRIPT_DIR/kgnmt_data
 BIN_DATA_DIR=$SCRIPT_DIR/data-bin/envi-bpe
-CHECKPOINT_DIR=$SCRIPT_DIR/checkpoints/envi-transformer
+CHECKPOINT_DIR=$SCRIPT_DIR/checkpoints/envi-dynamic-kgnmt
 BEST_CHECKPOINT=$CHECKPOINT_DIR/checkpoint_best.pt
 
 OUT_DIR=$SCRIPT_DIR/output
@@ -21,6 +21,8 @@ mkdir -p $OUT_DIR
 echo "Generating translations from the checkpoint..."
 
 fairseq-generate $BIN_DATA_DIR \
+  --task translation_dynamic_knowledge_aug \
+  --arch dynamic_kgnmt_iwslt_vi_en \
   --path $BEST_CHECKPOINT \
   --batch-size 128 --beam 5 --remove-bpe \
   --source-lang $SRC --target-lang $TGT \
