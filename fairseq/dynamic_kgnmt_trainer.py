@@ -961,9 +961,11 @@ class DynamicKgNMTTrainer(object):
                 if (self.data_parallel_world_size > 1 and 
                     hasattr(self.model, "no_sync") and 
                     i < len(samples) - 1 and 
-                    not self.is_fsdp):
+                    not self.is_fsdp
+                ):
                     return self.model.no_sync()
-                return contextlib.ExitStack()
+                else:
+                    return contextlib.ExitStack()
 
             try:
                 with maybe_no_sync():
@@ -981,23 +983,27 @@ class DynamicKgNMTTrainer(object):
                     }
                     logging_outputs.append(logging_output)
                     sample_size_total += sample_size
+                    del ks_loss
+                    del kgnmt_loss
 
-                    if self.cuda and self.get_num_updates() == 0:
-                        torch.cuda.empty_cache()
+                if self.cuda and self.get_num_updates() == 0:
+                    torch.cuda.empty_cache()
 
-            except Exception as e:
-                self.consolidate_optimizer()
-                self.save_checkpoint(
-                    os.path.join(self.cfg.checkpoint.save_dir, "crash.pt"), {}
-                )
-
-                if isinstance(e, RuntimeError) and "out of memory" in str(e):
+            except RuntimeError as e:
+                if "out of memory" in str(e):
                     self._log_oom(e)
                     has_oom = True
                     if raise_oom:
                         raise e
                 else:
                     raise e
+                
+            except Exception:
+                self.consolidate_optimizer()
+                self.save_checkpoint(
+                    os.path.join(self.cfg.checkpoint.save_dir, "crash.pt"), {}
+                )
+                raise
 
             if has_oom:
                 logger.warning("attempting to recover from OOM")
@@ -1116,68 +1122,6 @@ class DynamicKgNMTTrainer(object):
         log_prob_per_sample = (lprobs_for_target * pad_mask).sum(dim=1)
         return log_prob_per_sample
 
-    # @metrics.aggregate("valid")
-    # def valid_step(self, sample, raise_oom=False):
-    #     """Do forward pass in evaluation mode."""
-    #     if self.tpu:
-    #         import torch_xla.core.xla_model as xm
-
-    #         xm.rendezvous("valid_step")  # wait for all workers
-
-    #     # If EMA is enabled through store_ema=True
-    #     # and task.uses_ema is True, pass the EMA model as a keyword
-    #     # argument to the task.
-    #     extra_kwargs = {}
-    #     if self.cfg.ema.store_ema and getattr(self.task, "uses_ema", False):
-    #         extra_kwargs["ema_model"] = self.ema.get_model()
-
-    #     with torch.no_grad():
-    #         self.model.eval()
-    #         self.criterion.eval()
-
-    #         sample, is_dummy_batch = self._prepare_sample(sample)
-
-    #         try:
-    #             _loss, sample_size, logging_output = self.task.valid_step(
-    #                 sample, self.model, self.criterion, **extra_kwargs
-    #             )
-    #         except RuntimeError as e:
-    #             if "out of memory" in str(e):
-    #                 self._log_oom(e)
-    #                 if not raise_oom:
-    #                     logger.warning(
-    #                         "ran out of memory in validation step, retrying batch"
-    #                     )
-    #                     for p in self.model.parameters():
-    #                         if p.grad is not None:
-    #                             p.grad = None  # free some memory
-    #                     if self.cuda:
-    #                         torch.cuda.empty_cache()
-    #                     return self.valid_step(sample, raise_oom=True)
-    #             raise e
-
-    #         logging_outputs = [logging_output]
-    #         if is_dummy_batch:
-    #             if torch.is_tensor(sample_size):
-    #                 sample_size.zero_()
-    #             else:
-    #                 sample_size *= 0.0
-
-    #     # gather logging outputs from all replicas
-    #     if self.data_parallel_world_size > 1:
-    #         logging_outputs, (sample_size,) = self._aggregate_logging_outputs(
-    #             logging_outputs,
-    #             sample_size,
-    #             ignore=is_dummy_batch,
-    #         )
-
-    #     # log validation stats
-    #     if self.tpu:
-    #         logging_outputs = self._xla_markstep_and_send_to_cpu(logging_outputs)
-    #     logging_output = self._reduce_and_log_stats(logging_outputs, sample_size)
-
-    #     return logging_output
-
     @metrics.aggregate("valid")
     def valid_step(self, sample, raise_oom=False):
         with torch.no_grad():
@@ -1221,16 +1165,6 @@ class DynamicKgNMTTrainer(object):
 
                 # === 5. If BLEU is enabled, compute BLEU score ===
                 if self.cfg.task.eval_bleu:
-                    # bleu = self.task._inference_with_bleu(self.sequence_generator, sample, self.model)
-                    # logging_output["_bleu_sys_len"] = bleu.sys_len
-                    # logging_output["_bleu_ref_len"] = bleu.ref_len
-
-                    # # Split counts and totals for efficient summing
-                    # EVAL_BLEU_ORDER = 4
-                    # assert len(bleu.counts) == EVAL_BLEU_ORDER
-                    # for i in range(EVAL_BLEU_ORDER):
-                    #     logging_output["_bleu_counts_" + str(i)] = bleu.counts[i]
-                    #     logging_output["_bleu_totals_" + str(i)] = bleu.totals[i]
                     logging_output = self.task.bleu_valid_step(sample, self.model, logging_output)
 
                 # === 6. If accuracy reporting is enabled, compute accuracy ===
