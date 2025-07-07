@@ -130,15 +130,19 @@ class KnowledgeSelectorBase(BaseFairseqModel):
         Compute source representation, knowledge triple representations,
         and score each triple with softmax probability.
         """
-
-        # Encode source (with <s> at beginning)
+        # Add <x> at beginning of source sentence
+        x_token = self.src_dict.index("<x>")  # Get the token id for <x>
+    
+        # Add <x> token at the beginning of each sentence
+        src_tokens = torch.cat([torch.full((src_tokens.size(0), 1), x_token, device=src_tokens.device), src_tokens], dim=1)
+    
+        # Encode source (with <x> at beginning)
         encoder_out = self.encoder(
             src_tokens, src_lengths=src_lengths, return_all_hiddens=return_all_hiddens
         )
         src_enc = encoder_out["encoder_out"][0]  # (T_src, B, C)
-        c_s = src_enc[0]  # (B, C) - representation of <s>
+        c_x = src_enc[0]  # (B, C) - representation of <x>
 
-        # BUG: from here - about distributed training
         # Encode knowledge
         knw_encoder_out = self.knw_encoder(
             knw_tokens,
@@ -148,7 +152,6 @@ class KnowledgeSelectorBase(BaseFairseqModel):
         )
         knw_enc = knw_encoder_out["encoder_out"][0]  # (T_knw, B, C)
         knw_enc = knw_enc.transpose(0, 1)  # (B, T_knw, C)
-        # to here
 
         # Triple indices: (B, T_knw) → each token's triple id
         triple_indices = knw_encoder_out["triple_indices"][0].transpose(0, 1)  # (B, T_knw)
@@ -168,9 +171,9 @@ class KnowledgeSelectorBase(BaseFairseqModel):
         count = triple_one_hot.sum(dim=1, keepdim=True).transpose(1, 2)  # (B, Z, 1)
         z_mean = Z / (count + 1e-6)  # (B, Z, C)
 
-        # Compute triple scores: dot product between c_s and z_mean
-        # c_s: (B, C), z_mean: (B, Z, C) → output: (B, Z)
-        scores = torch.bmm(z_mean, c_s.unsqueeze(2)).squeeze(-1)  # (B, Z)
+        # Compute triple scores: dot product between c_x and z_mean
+        # c_x: (B, C), z_mean: (B, Z, C) → output: (B, Z)
+        scores = torch.bmm(z_mean, c_x.unsqueeze(2)).squeeze(-1)  # (B, Z)
         probs = torch.softmax(scores, dim=-1)  # (B, Z)
         # print("Probs shape: ", probs.shape)
 
@@ -195,9 +198,9 @@ class KnowledgeSelectorBase(BaseFairseqModel):
 
         return {
             "triple_probs": probs,          # p(t_i | X)
-            "triple_scores": scores,        # a_i = c_s^T z_i
+            "triple_scores": scores,        # a_i = c_x^T z_i
             "triple_vectors": z_mean,       # z_i for each triple
-            "source_repr": c_s,             # c_s
+            "source_repr": c_x,             # c_x
             "encoder_out": encoder_out,
             "knw_encoder_out": knw_encoder_out,
             "selected_triples_ids": selected_triple_ids,

@@ -941,7 +941,7 @@ class DynamicKgNMTTrainer(object):
     @metrics.aggregate("train")
     def train_step(self, samples, raise_oom=False):
         self._set_seed()
-        self.model.train()
+        # self.model.train()
         self.criterion.train()
         self.zero_grad()
 
@@ -1067,6 +1067,7 @@ class DynamicKgNMTTrainer(object):
             self.knowledge_selector_optimizer.zero_grad()
 
         modified_sample = sample.copy()
+        del sample
         modified_sample["net_input"]["knw_tokens"] = ks_output["selected_knw_tokens"]
         modified_sample["net_input"]["knw_lengths"] = ks_output["selected_knw_lengths"]
 
