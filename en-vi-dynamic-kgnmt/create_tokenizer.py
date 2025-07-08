@@ -22,7 +22,7 @@ special_tokens = [
 spm.SentencePieceTrainer.Train(
     f'--input={train_en},{train_vi},{train_kg} '
     f'--model_prefix={model_prefix} '
-    '--vocab_size=12000 '
+    '--vocab_size=8000 '
     '--character_coverage=1.0 '
     '--model_type=bpe '
     f'--user_defined_symbols={",".join(special_tokens)} '

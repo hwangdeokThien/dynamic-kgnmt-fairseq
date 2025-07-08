@@ -39,6 +39,8 @@ def collate_tokens(
     values,
     pad_idx,
     eos_idx=None,
+    x_idx=None,
+    x_beg=False,
     left_pad=False,
     move_eos_to_beginning=False,
     pad_to_length=None,
@@ -46,6 +48,11 @@ def collate_tokens(
     pad_to_bsz=None,
 ):
     """Convert a list of 1d tensors into a padded 2d tensor."""
+    if x_beg and x_idx is not None:
+        values = [
+            torch.cat([torch.tensor([x_idx], dtype=torch.long, device=v.device), v])
+            for v in values
+        ]
     size = max(v.size(0) for v in values)
     size = size if pad_to_length is None else max(size, pad_to_length)
     if pad_to_multiple != 1 and size % pad_to_multiple != 0:

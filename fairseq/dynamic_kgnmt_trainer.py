@@ -1041,15 +1041,20 @@ class DynamicKgNMTTrainer(object):
         self.model.knowledge_selector.train()
 
         with torch.cuda.amp.autocast(enabled=isinstance(self.knowledge_selector_optimizer, AMPOptimizer)):
+            ks_sample = sample.copy()
+            ks_sample["net_input"]["src_tokens"] = sample["net_input"]["src_tokens_ks"]
+            ks_sample["net_input"]["src_lengths"] = sample["net_input"]["src_lengths_ks"]
+            del ks_sample["net_input"]["src_tokens_ks"]
+            del ks_sample["net_input"]["src_lengths_ks"]
             ks_output = self.model.knowledge_selector(
-                sample["net_input"]["src_tokens"],
-                sample["net_input"]["src_lengths"],
-                sample["net_input"]["knw_tokens"],
-                sample["net_input"]["knw_lengths"],
+                ks_sample["net_input"]["src_tokens"],
+                ks_sample["net_input"]["src_lengths"],
+                ks_sample["net_input"]["knw_tokens"],
+                ks_sample["net_input"]["knw_lengths"],
                 sample_times=getattr(self.cfg.task, 'sample_times', 5),
             )
             with torch.no_grad():
-                reward = self._compute_log_prob_of_target(self.model.kgnmt, sample)
+                reward = self._compute_log_prob_of_target(self.model.kgnmt, ks_sample)
 
             baseline = reward.mean()
             loss = -((reward - baseline) * ks_output["log_p_t"]).mean()
@@ -1070,6 +1075,7 @@ class DynamicKgNMTTrainer(object):
         del sample
         modified_sample["net_input"]["knw_tokens"] = ks_output["selected_knw_tokens"]
         modified_sample["net_input"]["knw_lengths"] = ks_output["selected_knw_lengths"]
+
 
         return loss, reward, modified_sample
 
@@ -1134,8 +1140,8 @@ class DynamicKgNMTTrainer(object):
             try:
                 # === 1. Run KnowledgeSelector to get selected knowledge tokens ===
                 selector_output = self.model.knowledge_selector(
-                    src_tokens=sample["net_input"]["src_tokens"],
-                    src_lengths=sample["net_input"]["src_lengths"],
+                    src_tokens=sample["net_input"]["src_tokens_ks"],
+                    src_lengths=sample["net_input"]["src_lengths_ks"],
                     knw_tokens=sample["net_input"]["knw_tokens"],
                     knw_lengths=sample["net_input"]["knw_lengths"],
                     sample_times=getattr(self.cfg.task, "sample_times", 5),
@@ -1143,6 +1149,8 @@ class DynamicKgNMTTrainer(object):
                 )
 
                 # === 2. Replace knw_tokens and knw_lengths in sample with selected ones ===
+                del sample["net_input"]["src_tokens_ks"]
+                del sample["net_input"]["src_lengths_ks"]
                 sample["net_input"]["knw_tokens"] = selector_output["selected_knw_tokens"]
                 sample["net_input"]["knw_lengths"] = selector_output["selected_knw_lengths"]
 

@@ -44,12 +44,14 @@ class KnowledgeSelectorBase(BaseFairseqModel):
         :prog:
     """
 
-    def __init__(self, cfg, encoder, knw_encoder, x_token=None):
+    def __init__(self, cfg, encoder, knw_encoder, src_dict, knw_dict, x_token=None):
         super().__init__()
         
         self.encoder = encoder
         self.knw_encoder = knw_encoder
         self.x_token = x_token
+        self.src_dict = src_dict
+        self.knw_dict = knw_dict
         # self.knw_extractor = knw_extractor
 
         check_type(self.encoder, KgNMTEncoderBase)
@@ -74,7 +76,7 @@ class KnowledgeSelectorBase(BaseFairseqModel):
 
         src_dict, knw_dict = task.source_dictionary, task.knowledge_dictionary
 
-        x_token = knw_dict.index("<x>")
+        x_token = src_dict.index("<x>")
 
         encoder_embed_tokens = cls.build_embedding(
             cfg, src_dict, cfg.encoder.embed_dim, cfg.encoder.embed_path
@@ -89,7 +91,7 @@ class KnowledgeSelectorBase(BaseFairseqModel):
         encoder = cls.build_encoder(cfg, src_dict, encoder_embed_tokens)
         knw_encoder = cls.build_knw_encoder(cfg, knw_dict, knw_encoder_embed_tokens)
 
-        return cls(cfg, encoder=encoder, knw_encoder=knw_encoder, x_token=x_token)
+        return cls(cfg, encoder=encoder, knw_encoder=knw_encoder, src_dict=src_dict, knw_dict=knw_dict, x_token=x_token)
 
     @classmethod
     def build_embedding(cls, cfg, dictionary, embed_dim, path=None):
@@ -133,15 +135,19 @@ class KnowledgeSelectorBase(BaseFairseqModel):
         Compute source representation, knowledge triple representations,
         and score each triple with softmax probability.
         """
-        # Add <x> at beginning of source sentence
-        src_tokens = torch.cat([torch.full((src_tokens.size(0), 1), self.x_token, device=src_tokens.device), src_tokens], dim=1)
-    
-        # Encode source (with <x> at beginning)
+        # get the position of <x> token
+
         encoder_out = self.encoder(
             src_tokens, src_lengths=src_lengths, return_all_hiddens=return_all_hiddens
         )
         src_enc = encoder_out["encoder_out"][0]  # (T_src, B, C)
-        c_x = src_enc[0]  # (B, C) - representation of <x>
+        x_token_mask = src_tokens == self.x_token  # (B, T)
+        x_token_idx = x_token_mask.float().argmax(dim=1)  # (B)
+        batch_size = src_tokens.size(0)
+        batch_indices = torch.arange(batch_size, device=src_tokens.device)
+        src_enc_bt = src_enc.transpose(0, 1)
+        c_x = src_enc_bt[batch_indices, x_token_idx]  # (B, C)
+        del src_enc_bt
 
         # Encode knowledge
         knw_encoder_out = self.knw_encoder(

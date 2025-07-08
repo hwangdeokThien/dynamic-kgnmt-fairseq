@@ -17,6 +17,7 @@ def collate(
     samples,
     pad_idx,
     eos_idx,
+    x_idx,
     left_pad_source=True,
     left_pad_target=False,
     input_feeding=True,
@@ -26,11 +27,13 @@ def collate(
     if len(samples) == 0:
         return {}
 
-    def merge(key, left_pad, move_eos_to_beginning=False, pad_to_length=None):
+    def merge(key, left_pad, move_eos_to_beginning=False, pad_to_length=None, x_beg=False):
         return data_utils.collate_tokens(
             [s[key] for s in samples],
             pad_idx,
             eos_idx,
+            x_idx,
+            x_beg,
             left_pad,
             move_eos_to_beginning,
             pad_to_length=pad_to_length,
@@ -78,6 +81,17 @@ def collate(
     src_lengths, sort_order = src_lengths.sort(descending=True)
     id = id.index_select(0, sort_order)
     src_tokens = src_tokens.index_select(0, sort_order)
+
+    src_tokens_ks = merge(
+        "source",
+        left_pad=left_pad_source,
+        pad_to_length=pad_to_length["source"] if pad_to_length is not None else None,
+        x_beg=True
+    ).index_select(0, sort_order)
+    # sort by descending source length
+    src_lengths_ks = torch.LongTensor(
+        [s["source"].ne(pad_idx).long().sum()+1 for s in samples]
+    ).index_select(0, sort_order)
 
     # TODO_THESIS: Handle knowledge input here
     knw_tokens = merge(
@@ -133,6 +147,8 @@ def collate(
             "src_lengths": src_lengths,
             "knw_tokens": knw_tokens,
             "knw_lengths": knw_lengths,
+            "src_tokens_ks": src_tokens_ks,
+            "src_lengths_ks": src_lengths_ks
         },
         "target": target,
     }
@@ -289,6 +305,7 @@ class LanguagePairKnowledgeAugDataset(FairseqDataset):
         self.constraints = constraints
         self.append_bos = append_bos
         self.eos = eos if eos is not None else src_dict.eos()
+        self.x_idx = src_dict.index("<x>")
         self.src_lang_id = src_lang_id
         self.tgt_lang_id = tgt_lang_id
         if num_buckets > 0:
@@ -427,6 +444,7 @@ class LanguagePairKnowledgeAugDataset(FairseqDataset):
             samples,
             pad_idx=self.src_dict.pad(),
             eos_idx=self.eos,
+            x_idx=self.x_idx,
             left_pad_source=self.left_pad_source,
             left_pad_target=self.left_pad_target,
             input_feeding=self.input_feeding,

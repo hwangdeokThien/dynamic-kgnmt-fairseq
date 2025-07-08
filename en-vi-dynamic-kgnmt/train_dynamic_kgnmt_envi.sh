@@ -10,7 +10,7 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # === Configuration ===
 SRC=en
 TGT=vi
-VOCAB_SIZE=12000
+VOCAB_SIZE=8000
 MODEL_PREFIX=$SCRIPT_DIR/tokenizer/envi
 DATA_DIR=$SCRIPT_DIR/kgnmt_data
 BIN_DIR=$SCRIPT_DIR/data-bin/envi-bpe
@@ -29,14 +29,16 @@ else
 fi
 
 # === Train the model ===
-CUDA_VISIBLE_DEVICES=0,1 fairseq-train "$BIN_DIR" \
-  --distributed-world-size 2 \
+# CUDA_VISIBLE_DEVICES=0,1 fairseq-train "$BIN_DIR" \
+#   --distributed-world-size 2 \
+
+fairseq-train "$BIN_DIR" \
   --ddp-backend no_c10d \
   --task translation_dynamic_knowledge_aug \
   --arch dynamic_kgnmt_iwslt_vi_en \
   --criterion label_smoothed_cross_entropy \
   --label-smoothing 0.1 \
-  --max-tokens 8192 \
+  --max-tokens 4096 \
   --max-epoch 60 \
   --max-update 100000 \
   --eval-bleu \
@@ -56,7 +58,7 @@ CUDA_VISIBLE_DEVICES=0,1 fairseq-train "$BIN_DIR" \
   --activation_fn relu \
   --attention_dropout 0.0 \
   --activation_dropout 0.0 \
-  --sample_times 15 \
+  --sample_times 5 \
   --src_encoder_embed_dim 512 \
   --src_encoder_layers 6 \
   --knw_encoder_embed_dim 512 \
@@ -82,3 +84,6 @@ CUDA_VISIBLE_DEVICES=0,1 fairseq-train "$BIN_DIR" \
   # --knowledge-selector-warmup-init-lr -1.0 
 
 echo "✅ Training complete! Checkpoints saved in: $CHECKPOINT_DIR"
+
+# 1. Chỉ dùng KG tiếng anh
+# 2. Kiểm tra reward
