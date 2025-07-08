@@ -425,10 +425,10 @@ class TranslationKnowledgeAugTask(FairseqTask):
         return LanguagePairKnowledgeAugDataset(
             src_tokens,
             src_lengths,
-            self.source_dictionary,
+            self.src_dict,
             knw_tokens,
             knw_lengths,
-            self.source_dictionary,
+            self.knw_dict,
             tgt_dict=self.target_dictionary,
             constraints=constraints,
         )
