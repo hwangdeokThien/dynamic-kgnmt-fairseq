@@ -31,9 +31,8 @@ fi
 
 # === Train the model on 2 GPUs ===
 
-# CUDA_VISIBLE_DEVICES=0,1 fairseq-train "$BIN_DIR" \
-#   --distributed-world-size 2 \
-fairseq-train "$BIN_DIR" \
+CUDA_VISIBLE_DEVICES=0 fairseq-train "$BIN_DIR" \
+  --distributed-world-size 1 \
   --ddp-backend no_c10d \
   --task translation_knowledge_aug \
   --arch kgnmt_iwslt_vi_en \
