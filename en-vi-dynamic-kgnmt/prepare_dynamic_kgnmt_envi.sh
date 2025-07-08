@@ -13,6 +13,7 @@ KG=kg
 DATA_DIR=$SCRIPT_DIR/kgnmt_data 
 SPM_DATA_DIR=$DATA_DIR/spm
 TOKENIZER_MODEL=$SCRIPT_DIR/tokenizer/envikg.model
+SHARED_DICT=$SCRIPT_DIR/tokenizer/dict.envikg.txt
 OUT_DIR=$SCRIPT_DIR/data-bin/envi-bpe
 SPLITS="train valid test"
 
@@ -45,21 +46,23 @@ echo "Running fairseq-preprocess..."
 
 fairseq-preprocess \
   --source-lang $SRC --target-lang $TGT \
+  --tgtdict $SHARED_DICT \
+  --srcdict $SHARED_DICT \
   --trainpref $SPM_DATA_DIR/train.spm \
   --validpref $SPM_DATA_DIR/valid.spm \
   --testpref  $SPM_DATA_DIR/test.spm \
   --destdir $OUT_DIR \
-  --joined-dictionary \
   --workers 4
 
 fairseq-preprocess \
   --source-lang $KG --target-lang $KG \
   --only-source \
+  --tgtdict $SHARED_DICT \
+  --srcdict $SHARED_DICT \
   --trainpref $SPM_DATA_DIR/train.spm \
   --validpref $SPM_DATA_DIR/valid.spm \
   --testpref  $SPM_DATA_DIR/test.spm \
   --destdir $OUT_DIR \
-  --joined-dictionary \
   --workers 4
 
 mv $OUT_DIR/train.kg-kg.kg.bin $OUT_DIR/train.en-vi.kg.bin
@@ -68,5 +71,10 @@ mv $OUT_DIR/test.kg-kg.kg.bin $OUT_DIR/test.en-vi.kg.bin
 mv $OUT_DIR/train.kg-kg.kg.idx $OUT_DIR/train.en-vi.kg.idx
 mv $OUT_DIR/valid.kg-kg.kg.idx $OUT_DIR/valid.en-vi.kg.idx
 mv $OUT_DIR/test.kg-kg.kg.idx $OUT_DIR/test.en-vi.kg.idx
+
+rm $OUT_DIR/dict.*
+cp $SHARED_DICT $OUT_DIR/dict.en.txt
+cp $SHARED_DICT $OUT_DIR/dict.vi.txt
+cp $SHARED_DICT $OUT_DIR/dict.kg.txt
 
 echo "✅ Data preparation complete: $OUT_DIR"
