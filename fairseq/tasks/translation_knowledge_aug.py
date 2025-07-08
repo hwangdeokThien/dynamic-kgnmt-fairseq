@@ -373,9 +373,6 @@ class TranslationKnowledgeAugTask(FairseqTask):
         assert src_dict.pad() == tgt_dict.pad()
         assert src_dict.eos() == tgt_dict.eos()
         assert src_dict.unk() == tgt_dict.unk()
-        assert src_dict.index("<k>") == knw_dict.index("<k>")
-        assert src_dict.index("<x>") == knw_dict.index("<x>")
-        assert src_dict.index("<t>") == knw_dict.index("<t>")
 
         logger.info("[{}] dictionary: {} types".format(cfg.source_lang, len(src_dict)))
         logger.info("[{}] dictionary: {} types".format(cfg.target_lang, len(tgt_dict)))

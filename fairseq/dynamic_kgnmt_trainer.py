@@ -1041,20 +1041,15 @@ class DynamicKgNMTTrainer(object):
         self.model.knowledge_selector.train()
 
         with torch.cuda.amp.autocast(enabled=isinstance(self.knowledge_selector_optimizer, AMPOptimizer)):
-            ks_sample = sample.copy()
-            ks_sample["net_input"]["src_tokens"] = sample["net_input"]["src_tokens_ks"]
-            ks_sample["net_input"]["src_lengths"] = sample["net_input"]["src_lengths_ks"]
-            del ks_sample["net_input"]["src_tokens_ks"]
-            del ks_sample["net_input"]["src_lengths_ks"]
             ks_output = self.model.knowledge_selector(
-                ks_sample["net_input"]["src_tokens"],
-                ks_sample["net_input"]["src_lengths"],
-                ks_sample["net_input"]["knw_tokens"],
-                ks_sample["net_input"]["knw_lengths"],
+                sample["net_input"]["src_tokens_ks"],
+                sample["net_input"]["src_lengths_ks"],
+                sample["net_input"]["knw_tokens"],
+                sample["net_input"]["knw_lengths"],
                 sample_times=getattr(self.cfg.task, 'sample_times', 5),
             )
             with torch.no_grad():
-                reward = self._compute_log_prob_of_target(self.model.kgnmt, ks_sample)
+                reward = self._compute_log_prob_of_target(self.model.kgnmt, sample)
 
             baseline = reward.mean()
             loss = -((reward - baseline) * ks_output["log_p_t"]).mean()
@@ -1071,13 +1066,16 @@ class DynamicKgNMTTrainer(object):
             self.knowledge_selector_optimizer.step()
             self.knowledge_selector_optimizer.zero_grad()
 
-        modified_sample = sample.copy()
-        del sample
-        modified_sample["net_input"]["knw_tokens"] = ks_output["selected_knw_tokens"]
-        modified_sample["net_input"]["knw_lengths"] = ks_output["selected_knw_lengths"]
+        # modified_sample = sample.copy()
+        # del sample
+        # modified_sample["net_input"]["knw_tokens"] = ks_output["selected_knw_tokens"]
+        # modified_sample["net_input"]["knw_lengths"] = ks_output["selected_knw_lengths"]   
+        del sample["net_input"]["src_tokens_ks"]
+        del sample["net_input"]["src_lengths_ks"]
+        sample["net_input"]["knw_tokens"] = ks_output["selected_knw_tokens"]
+        sample["net_input"]["knw_lengths"] = ks_output["selected_knw_lengths"]
 
-
-        return loss, reward, modified_sample
+        return loss, reward, sample
 
     def _train_kgnmt_phase(self, sample, is_dummy_batch):
         self.model.knowledge_selector.eval()
@@ -1121,7 +1119,8 @@ class DynamicKgNMTTrainer(object):
         metrics.log_scalar(f"{tag}_gnorm", grad_norm, priority=400, round=3)
 
     def _compute_log_prob_of_target(self, model, sample):
-        decoder_out = model(**sample["net_input"])
+        exclude_keys = {"src_tokens_ks", "src_lengths_ks"}
+        decoder_out = model(**{k: v for k, v in sample["net_input"].items() if k not in exclude_keys})
         lprobs = model.get_normalized_probs(decoder_out, log_probs=True)
         target = sample["target"]
         pad_mask = target.ne(model.decoder.padding_idx)
