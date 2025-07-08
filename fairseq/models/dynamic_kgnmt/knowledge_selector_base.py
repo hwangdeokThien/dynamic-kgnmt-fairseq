@@ -44,11 +44,12 @@ class KnowledgeSelectorBase(BaseFairseqModel):
         :prog:
     """
 
-    def __init__(self, cfg, encoder, knw_encoder):
+    def __init__(self, cfg, encoder, knw_encoder, x_token=None):
         super().__init__()
         
         self.encoder = encoder
         self.knw_encoder = knw_encoder
+        self.x_token = x_token
         # self.knw_extractor = knw_extractor
 
         check_type(self.encoder, KgNMTEncoderBase)
@@ -73,6 +74,8 @@ class KnowledgeSelectorBase(BaseFairseqModel):
 
         src_dict, knw_dict = task.source_dictionary, task.knowledge_dictionary
 
+        x_token = knw_dict.index("<x>")
+
         encoder_embed_tokens = cls.build_embedding(
             cfg, src_dict, cfg.encoder.embed_dim, cfg.encoder.embed_path
         )
@@ -86,7 +89,7 @@ class KnowledgeSelectorBase(BaseFairseqModel):
         encoder = cls.build_encoder(cfg, src_dict, encoder_embed_tokens)
         knw_encoder = cls.build_knw_encoder(cfg, knw_dict, knw_encoder_embed_tokens)
 
-        return cls(cfg, encoder=encoder, knw_encoder=knw_encoder)
+        return cls(cfg, encoder=encoder, knw_encoder=knw_encoder, x_token=x_token)
 
     @classmethod
     def build_embedding(cls, cfg, dictionary, embed_dim, path=None):
@@ -131,10 +134,7 @@ class KnowledgeSelectorBase(BaseFairseqModel):
         and score each triple with softmax probability.
         """
         # Add <x> at beginning of source sentence
-        x_token = self.src_dict.index("<x>")  # Get the token id for <x>
-    
-        # Add <x> token at the beginning of each sentence
-        src_tokens = torch.cat([torch.full((src_tokens.size(0), 1), x_token, device=src_tokens.device), src_tokens], dim=1)
+        src_tokens = torch.cat([torch.full((src_tokens.size(0), 1), self.x_token, device=src_tokens.device), src_tokens], dim=1)
     
         # Encode source (with <x> at beginning)
         encoder_out = self.encoder(
