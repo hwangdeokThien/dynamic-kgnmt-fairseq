@@ -10,7 +10,7 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # === Configuration ===
 SRC=en
 TGT=vi
-VOCAB_SIZE=12000
+VOCAB_SIZE=8000
 MODEL_PREFIX=$SCRIPT_DIR/tokenizer/envi
 DATA_DIR=$SCRIPT_DIR/kgnmt_data
 BIN_DIR=$SCRIPT_DIR/data-bin/envi-bpe
@@ -29,8 +29,10 @@ else
 fi
 
 # === Train the model ===
-CUDA_VISIBLE_DEVICES=0,1 fairseq-train "$BIN_DIR" \
-  --distributed-world-size 2 \
+# CUDA_VISIBLE_DEVICES=0,1 fairseq-train "$BIN_DIR" \
+#   --distributed-world-size 2 \
+
+fairseq-train "$BIN_DIR" \
   --ddp-backend no_c10d \
   --task translation_dynamic_knowledge_aug \
   --arch dynamic_kgnmt_iwslt_vi_en \
@@ -76,9 +78,8 @@ CUDA_VISIBLE_DEVICES=0,1 fairseq-train "$BIN_DIR" \
   --knowledge-selector-optimizer adam \
   --knowledge-selector-adam-betas '(0.9, 0.98)' \
   --knowledge-selector-weight-decay 0.0001 \
-  --knowledge-selector-lr-scheduler polynomial_decay \
-  --knowledge-selector-warmup-updates 1000 \
-  # --share-decoder-input-output-embed \
-  # --knowledge-selector-warmup-init-lr -1.0 
+  --knowledge-selector-lr-scheduler inverse_sqrt \
+  --knowledge-selector-warmup-updates 2000 \
+  --knowledge-selector-warmup-init-lr -1.0 
 
 echo "✅ Training complete! Checkpoints saved in: $CHECKPOINT_DIR"

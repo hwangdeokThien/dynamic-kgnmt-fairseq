@@ -361,10 +361,16 @@ class DynamicKgNMTTrainer(object):
     # {'_name': 'inverse_sqrt', 'warmup_updates': 4000, 'warmup_init_lr': -1.0, 'lr': [0.0005]}
     def _build_knowledge_selector_lr_scheduler(self):
         """Build LR scheduler for knowledge selector."""
+        # ks_lr_shuduler_cfg = {
+        #     "_name": self.cfg.model.knowledge_selector_lr_scheduler,
+        #     "warmup_updates": self.cfg.model.knowledge_selector_warmup_updates,
+        #     "total_num_update": self.cfg.model.max_update,
+        #     "lr": [self.cfg.model.knowledge_selector_lr]
+        # }
         ks_lr_shuduler_cfg = {
             "_name": self.cfg.model.knowledge_selector_lr_scheduler,
             "warmup_updates": self.cfg.model.knowledge_selector_warmup_updates,
-            "total_num_update": self.cfg.model.max_update,
+            "warmup_init_lr": self.cfg.model.knowledge_selector_warmup_init_lr,
             "lr": [self.cfg.model.knowledge_selector_lr]
         }
         ks_lr_shuduler_cfg = OmegaConf.create(ks_lr_shuduler_cfg)
