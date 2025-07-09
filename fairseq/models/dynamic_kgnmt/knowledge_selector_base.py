@@ -135,9 +135,6 @@ class KnowledgeSelectorBase(BaseFairseqModel):
         Compute source representation, knowledge triple representations,
         and score each triple with softmax probability.
         """
-        # for e in knw_tokens[0]:
-        #     print(self.knw_dict[e], end=" ", file=log_file)
-        # print('\n', file=log_file)
 
         encoder_out = self.encoder(
             src_tokens, src_lengths=src_lengths, return_all_hiddens=return_all_hiddens
@@ -250,10 +247,8 @@ class KnowledgeSelectorBase(BaseFairseqModel):
 
         # === Step 1: Sample triple indices ===
         if inference:
-            print("Sampling triples for inference...")
             selected = torch.topk(probs, k=sample_times, dim=-1).indices  # (B, sample_times)
         else:
-            print("Sampling triples for training...")  # correct multinomial behavior
             selected = torch.multinomial(probs, num_samples=sample_times, replacement=True)  # (B, sample_times)
 
         # === Step 2: Create token-level mask ===

@@ -1055,12 +1055,24 @@ class DynamicKgNMTTrainer(object):
                 reward = self._compute_log_prob_of_target(self.model.kgnmt, sample)
 
         reward = reward.detach()
+        if torch.isnan(reward).any() or torch.isinf(reward).any():
+            print(">>> Found NaN/Inf in reward")
+            print(">>> Reward:", reward)
+            raise ValueError("NaN/Inf in reward")
         ks_output["selected_knw_tokens"] = ks_output["selected_knw_tokens"].detach()
         ks_output["selected_knw_lengths"] = ks_output["selected_knw_lengths"].detach()
 
         baseline = reward.mean()
+        if torch.isnan(ks_output["log_p_t"]).any() or torch.isinf(ks_output["log_p_t"]).any():
+            print(">>> Found NaN/Inf in log_p_t")
+            raise ValueError("Invalid log_p_t from selector")
         loss = -((reward - baseline) * ks_output["log_p_t"]).mean() # notice
 
+        if torch.isnan(loss) or torch.isinf(loss):
+            print(">>> NaN/Inf in loss during KS phase:", loss.item())
+            print(">>> Sample:", sample)
+            raise FloatingPointError("NaN/Inf in loss")
+        
         self.knowledge_selector_optimizer.backward(loss)
 
         if not is_dummy_batch:
@@ -1087,8 +1099,14 @@ class DynamicKgNMTTrainer(object):
         with torch.cuda.amp.autocast(enabled=isinstance(self.kgnmt_optimizer, AMPOptimizer)):
             loss, sample_size, logging_output = self.criterion(self.model.kgnmt, sample)
             if is_dummy_batch:
+                print("dummy batch")
                 loss *= 0
 
+        if torch.isnan(loss) or torch.isinf(loss):
+            print(">>> NaN/Inf in loss during KG-NMT phase:", loss.item())
+            print(">>> Sample:", sample)
+            raise FloatingPointError("NaN/Inf in loss")
+        
         self.kgnmt_optimizer.backward(loss)
 
         if not is_dummy_batch:
@@ -1106,6 +1124,10 @@ class DynamicKgNMTTrainer(object):
     def _process_gradients(self, optimizer, model, sample_size, tag):
         optimizer.all_reduce_grads(model)
 
+        if sample_size == 0:
+            logger.warning(f"Sample size is 0 in {tag} phase, skipping gradient step.")
+            return
+
         numer = self.data_parallel_world_size if not self.cfg.optimization.use_bmuf else 1
         denom = sample_size if sample_size > 0 else 1.0
         optimizer.multiply_grads(numer / denom)
@@ -1113,6 +1135,11 @@ class DynamicKgNMTTrainer(object):
         grad_norm = self.clip_grad_norm(self.cfg.optimization.clip_norm)
 
         if not self.tpu and not torch.isfinite(grad_norm).all():
+            for name, param in model.named_parameters():
+                if param.grad is not None and (torch.isnan(param.grad).any() or torch.isinf(param.grad).any()):
+                    logger.error(f">>> NaN/Inf in gradient of parameter: {name}")
+                    logger.error(f">>> Gradient sample: {param.grad.view(-1)[:5]}")
+                    raise FloatingPointError("NaN/Inf in gradients.")
             if self.cfg.common.amp:
                 logger.warning(f"AMP Overflow in {tag}, skipping step.")
                 return
