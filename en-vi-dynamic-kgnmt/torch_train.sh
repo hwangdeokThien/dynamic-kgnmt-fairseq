@@ -6,6 +6,7 @@ set -e
 
 # === Resolve script directory ===
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+PROJECT_DIR=$(realpath "$SCRIPT_DIR/..")   # project_root
 
 # === Configuration ===
 SRC=en
@@ -33,7 +34,7 @@ else
 fi
 
 # === Run training with torchrun ===
-torchrun --nproc_per_node=$NUM_GPUS --master_port=$MASTER_PORT fairseq_cli/train.py "$BIN_DIR" \
+torchrun --nproc_per_node=$NUM_GPUS --master_port=$MASTER_PORT $PROJECT_DIR/fairseq_cli/train.py "$BIN_DIR" \
   --distributed-world-size $NUM_GPUS \
   --ddp-backend c10d \
   --task translation_dynamic_knowledge_aug \
