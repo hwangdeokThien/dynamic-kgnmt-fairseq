@@ -941,7 +941,6 @@ class DynamicKgNMTTrainer(object):
     @metrics.aggregate("train")
     def train_step(self, samples, raise_oom=False):
         self._set_seed()
-        # self.model.train()
         self.criterion.train()
         self.zero_grad()
 
@@ -971,6 +970,10 @@ class DynamicKgNMTTrainer(object):
                 with maybe_no_sync():
                     # Phase 1: Train knowledge selector
                     ks_loss, reward, modified_sample = self._train_knowledge_selector_phase(sample, is_dummy_batch)
+
+                    if self.cuda and self.get_num_updates() == 0:
+                        torch.cuda.empty_cache()
+                        torch.cuda.synchronize()
 
                     # Phase 2: Train KG-NMT
                     kgnmt_loss, sample_size, kgnmt_logging_output = self._train_kgnmt_phase(modified_sample, is_dummy_batch)
@@ -1051,8 +1054,12 @@ class DynamicKgNMTTrainer(object):
             with torch.no_grad():
                 reward = self._compute_log_prob_of_target(self.model.kgnmt, sample)
 
-            baseline = reward.mean()
-            loss = -((reward - baseline) * ks_output["log_p_t"]).mean()
+        reward = reward.detach()
+        ks_output["selected_knw_tokens"] = ks_output["selected_knw_tokens"].detach()
+        ks_output["selected_knw_lengths"] = ks_output["selected_knw_lengths"].detach()
+
+        baseline = reward.mean()
+        loss = -((reward - baseline) * ks_output["log_p_t"]).mean() # notice
 
         self.knowledge_selector_optimizer.backward(loss)
 
@@ -1066,10 +1073,6 @@ class DynamicKgNMTTrainer(object):
             self.knowledge_selector_optimizer.step()
             self.knowledge_selector_optimizer.zero_grad()
 
-        # modified_sample = sample.copy()
-        # del sample
-        # modified_sample["net_input"]["knw_tokens"] = ks_output["selected_knw_tokens"]
-        # modified_sample["net_input"]["knw_lengths"] = ks_output["selected_knw_lengths"]   
         del sample["net_input"]["src_tokens_ks"]
         del sample["net_input"]["src_lengths_ks"]
         sample["net_input"]["knw_tokens"] = ks_output["selected_knw_tokens"]
