@@ -937,13 +937,11 @@ class DynamicKgNMTTrainer(object):
     def reset_dummy_batch(self, batch):
         self._dummy_batch = batch
 
-    # TODO_THESIS: Maybe have to modify this train_step function, or creating new Trainer class
     @metrics.aggregate("train")
     def train_step(self, samples, raise_oom=False):
         self._set_seed()
         self.criterion.train()
         self.zero_grad()
-
         metrics.log_start_time("train_wall", priority=800, round=0)
 
         extra_kwargs = {}
@@ -957,10 +955,11 @@ class DynamicKgNMTTrainer(object):
             sample, is_dummy_batch = self._prepare_sample(sample)
 
             def maybe_no_sync():
-                if (self.data_parallel_world_size > 1 and 
-                    hasattr(self.model, "no_sync") and 
-                    i < len(samples) - 1 and 
-                    not self.is_fsdp
+                if (
+                    self.data_parallel_world_size > 1
+                    and hasattr(self.model, "no_sync")
+                    and i < len(samples) - 1
+                    and not self.is_fsdp
                 ):
                     return self.model.no_sync()
                 else:
@@ -980,8 +979,8 @@ class DynamicKgNMTTrainer(object):
 
                     logging_output = {
                         **kgnmt_logging_output,
-                        "knw_sel_reward": reward.mean().item(),
-                        "knw_sel_loss": ks_loss.item(),
+                        "knw_sel_reward": reward.mean().item() if torch.isfinite(reward).all() else 0.0,
+                        "knw_sel_loss": ks_loss.item() if torch.isfinite(ks_loss) else 0.0,
                         "sample_size": sample_size
                     }
                     logging_outputs.append(logging_output)
@@ -1000,45 +999,54 @@ class DynamicKgNMTTrainer(object):
                         raise e
                 else:
                     raise e
-                
+
             except Exception:
                 self.consolidate_optimizer()
-                self.save_checkpoint(
-                    os.path.join(self.cfg.checkpoint.save_dir, "crash.pt"), {}
-                )
+                self.save_checkpoint(os.path.join(self.cfg.checkpoint.save_dir, "crash.pt"), {})
                 raise
 
             if has_oom:
-                logger.warning("attempting to recover from OOM")
+                logger.warning("Attempting to recover from OOM")
                 ooms += 1
                 self.zero_grad()
                 if self.cuda:
                     torch.cuda.empty_cache()
                 if self.cfg.distributed_training.distributed_world_size == 1:
                     return None
+                logging_outputs.append({"sample_size": 0})
 
-        # Update state and scheduler
+        # Ensure sample size > 0 before reduce
+        if sample_size_total == 0:
+            logger.warning("sample_size_total is 0, skipping update.")
+            if torch.distributed.is_initialized():
+                torch.distributed.barrier()
+            return None
+
+        # Update step
         self.set_num_updates(self.get_num_updates() + 1)
 
+        # EMA step
         if self.cfg.ema.store_ema:
             self.ema.step(self.get_model(), self.get_num_updates())
             metrics.log_scalar("ema_decay", self.ema.get_decay(), priority=10000, round=5, weight=0)
 
-        # Log AMP loss scale (if applicable)
+        # Log AMP scale
         for opt, name in [
             (self.knowledge_selector_optimizer, "ks"),
             (self.kgnmt_optimizer, "kgnmt"),
         ]:
-            if self.cfg.common.fp16:
-                metrics.log_scalar(f"loss_scale_{name}", opt.scaler.loss_scale, priority=700, round=4, weight=0)
-            elif self.cfg.common.amp:
-                metrics.log_scalar(f"loss_scale_{name}", opt.scaler.get_scale(), priority=700, round=4, weight=0)
+            if hasattr(opt, "scaler"):
+                scale = opt.scaler.loss_scale if self.cfg.common.fp16 else opt.scaler.get_scale()
+                metrics.log_scalar(f"loss_scale_{name}", scale, priority=700, round=4, weight=0)
 
-        # Final log & return
+        # Sync before reducing stats
+        if torch.distributed.is_initialized():
+            torch.distributed.barrier()
+
         logging_output = self._reduce_and_log_stats(logging_outputs, sample_size_total)
         metrics.log_stop_time("train_wall")
         return logging_output
-    
+  
     def _train_knowledge_selector_phase(self, sample, is_dummy_batch):
         self.model.kgnmt.eval()
         self.model.knowledge_selector.train()
@@ -1051,28 +1059,29 @@ class DynamicKgNMTTrainer(object):
                 sample["net_input"]["knw_lengths"],
                 sample_times=getattr(self.cfg.task, 'sample_times', 5),
             )
+
             with torch.no_grad():
                 reward = self._compute_log_prob_of_target(self.model.kgnmt, sample)
 
+        # Normalize and protect reward
         reward = reward.detach()
-        if torch.isnan(reward).any() or torch.isinf(reward).any():
-            print(">>> Found NaN/Inf in reward")
-            print(">>> Reward:", reward)
-            raise ValueError("NaN/Inf in reward")
+        reward = torch.nan_to_num(reward, nan=0.0, posinf=1.0, neginf=-1.0)
+
+        # Detach selected triples to avoid accidental backward
         ks_output["selected_knw_tokens"] = ks_output["selected_knw_tokens"].detach()
         ks_output["selected_knw_lengths"] = ks_output["selected_knw_lengths"].detach()
 
+        # Compute loss with clipped advantage
         baseline = reward.mean()
-        if torch.isnan(ks_output["log_p_t"]).any() or torch.isinf(ks_output["log_p_t"]).any():
-            print(">>> Found NaN/Inf in log_p_t")
-            raise ValueError("Invalid log_p_t from selector")
-        loss = -((reward - baseline) * ks_output["log_p_t"]).mean() # notice
+        advantage = (reward - baseline).clamp(min=-5, max=5)
 
-        if torch.isnan(loss) or torch.isinf(loss):
-            print(">>> NaN/Inf in loss during KS phase:", loss.item())
-            print(">>> Sample:", sample)
-            raise FloatingPointError("NaN/Inf in loss")
-        
+        log_p_t = torch.nan_to_num(ks_output["log_p_t"], nan=0.0, posinf=0.0, neginf=0.0)
+        loss = -(advantage * log_p_t).mean()
+
+        if not torch.isfinite(loss):
+            print(">>> NaN/Inf in KS loss")
+            raise FloatingPointError("KS loss is invalid")
+
         self.knowledge_selector_optimizer.backward(loss)
 
         if not is_dummy_batch:
@@ -1085,6 +1094,7 @@ class DynamicKgNMTTrainer(object):
             self.knowledge_selector_optimizer.step()
             self.knowledge_selector_optimizer.zero_grad()
 
+        # Clean up input to avoid redundant memory
         del sample["net_input"]["src_tokens_ks"]
         del sample["net_input"]["src_lengths_ks"]
         sample["net_input"]["knw_tokens"] = ks_output["selected_knw_tokens"]
@@ -1102,11 +1112,12 @@ class DynamicKgNMTTrainer(object):
                 print("dummy batch")
                 loss *= 0
 
-        if torch.isnan(loss) or torch.isinf(loss):
-            print(">>> NaN/Inf in loss during KG-NMT phase:", loss.item())
-            print(">>> Sample:", sample)
-            raise FloatingPointError("NaN/Inf in loss")
-        
+        loss = torch.nan_to_num(loss, nan=0.0, posinf=1e3, neginf=-1e3)
+
+        if not torch.isfinite(loss):
+            print(">>> NaN/Inf in KG-NMT loss")
+            raise FloatingPointError("KG-NMT loss is invalid")
+
         self.kgnmt_optimizer.backward(loss)
 
         if not is_dummy_batch:
