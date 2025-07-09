@@ -265,10 +265,7 @@ class KgNMTKnowledgeEncoderBase(FairseqEncoder):
 
         triple_indices = torch.zeros_like(src_tokens, dtype=torch.long)
         if knw_sep:
-            # 1 where token is <k>, 0 otherwise, ignoring pads
-            # is_sep = (src_tokens == self.knw_sep_idx) & (~src_tokens.eq(self.padding_idx))
             is_sep = (src_tokens == self.knw_sep_idx) & (~src_tokens.eq(self.padding_idx))
-            # Cumulative sum of separators along each row (batch), left-padding aware
             triple_indices = is_sep.cumsum(dim=1)
             triple_indices.masked_fill_(src_tokens.eq(self.padding_idx), 0)  # keep pads as 0
             triple_indices = triple_indices.transpose(0, 1)  # T x B

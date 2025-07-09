@@ -135,7 +135,9 @@ class KnowledgeSelectorBase(BaseFairseqModel):
         Compute source representation, knowledge triple representations,
         and score each triple with softmax probability.
         """
-        # get the position of <x> token
+        # for e in knw_tokens[0]:
+        #     print(self.knw_dict[e], end=" ", file=log_file)
+        # print('\n', file=log_file)
 
         encoder_out = self.encoder(
             src_tokens, src_lengths=src_lengths, return_all_hiddens=return_all_hiddens
@@ -161,20 +163,30 @@ class KnowledgeSelectorBase(BaseFairseqModel):
 
         # Triple indices: (B, T_knw) → each token's triple id
         triple_indices = knw_encoder_out["triple_indices"][0].transpose(0, 1)  # (B, T_knw)
-        # print("Triple indices shape: ", triple_indices.shape)
         triple_indices = triple_indices.to(knw_enc.device)  # ensure same device
 
         B, T_knw, C = knw_enc.shape
-        max_idx = triple_indices.max().item() + 1  # number of triples
-        Z = torch.zeros(B, max_idx, C, device=knw_enc.device)  # (B, Z, C)
-        count = torch.zeros(B, max_idx, 1, device=knw_enc.device)  # (B, Z, 1)
+        max_idx = triple_indices.max().item() + 1
 
-        # One-hot mask: (B, T_knw, Z)
-        triple_one_hot = torch.nn.functional.one_hot(triple_indices, num_classes=max_idx).float()  # (B, T_knw, Z)
+        # Create mask for <pad> and <k> tokens
+        ignore_mask = knw_tokens.eq(self.encoder.padding_idx) | (knw_tokens == self.knw_encoder.knw_sep_idx)  # (B, T_knw)
 
-        # Mean pooling per triple: matrix multiply to avoid looping
+        # Set ignored positions to a dummy invalid index (max_idx)
+        safe_indices = triple_indices.masked_fill(ignore_mask, max_idx)  # (B, T_knw)
+
+        # Now use one-hot with num_classes = max_idx + 1
+        triple_one_hot = torch.nn.functional.one_hot(safe_indices, num_classes=max_idx + 1).float()  # (B, T_knw, Z+1)
+
+        # Drop the last column (invalid entries)
+        triple_one_hot = triple_one_hot[:, :, :max_idx]  # (B, T_knw
+
+        # Weighted sum of token vectors for each triple
         Z = torch.bmm(triple_one_hot.transpose(1, 2), knw_enc)  # (B, Z, C)
+
+        # Count valid (non-pad) tokens in each triple
         count = triple_one_hot.sum(dim=1, keepdim=True).transpose(1, 2)  # (B, Z, 1)
+
+        # Safe mean
         z_mean = Z / (count + 1e-6)  # (B, Z, C)
 
         # Compute triple scores: dot product between c_x and z_mean
@@ -201,15 +213,14 @@ class KnowledgeSelectorBase(BaseFairseqModel):
         # Optionally average across multiple samples
         log_p_t = log_p_t.mean(dim=1)  # (B,)
 
-
         return {
-            "triple_probs": probs,          # p(t_i | X)
-            "triple_scores": scores,        # a_i = c_x^T z_i
-            "triple_vectors": z_mean,       # z_i for each triple
-            "source_repr": c_x,             # c_x
-            "encoder_out": encoder_out,
-            "knw_encoder_out": knw_encoder_out,
-            "selected_triples_ids": selected_triple_ids,
+            # "triple_probs": probs,          # p(t_i | X)
+            # "triple_scores": scores,        # a_i = c_x^T z_i
+            # "triple_vectors": z_mean,       # z_i for each triple
+            # "source_repr": c_x,             # c_x
+            # "encoder_out": encoder_out,
+            # "knw_encoder_out": knw_encoder_out,
+            # "selected_triples_ids": selected_triple_ids,
             "selected_knw_tokens": selected_knw_tokens, # (B, T_knw)
             "selected_knw_lengths": selected_knw_lengths, # (B, T_knw) - number of tokens in each triple
             "log_p_t": log_p_t
@@ -223,25 +234,27 @@ class KnowledgeSelectorBase(BaseFairseqModel):
         sample_times: int,
         inference: bool = False,
         padding_idx: int = 0              # e.g. <pad> token ID
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
-        Samples triples and returns token IDs from those triples, padded to original length.
+        Samples triples and returns token IDs from those triples, left-padded.
 
         Returns:
             selected_triples: (B, sample_times)
             selected_knw_tokens: (B, T_knw) — tokens not in sampled triples are replaced with `padding_idx`
+            selected_knw_lengths: (B,) — number of valid tokens per sample
         """
         B, Z = probs.shape
         _, T_knw = knw_tokens.shape
 
         sample_times = min(sample_times, Z)
+
         # === Step 1: Sample triple indices ===
         if inference:
+            print("Sampling triples for inference...")
             selected = torch.topk(probs, k=sample_times, dim=-1).indices  # (B, sample_times)
         else:
-            sampled = torch.multinomial(probs, num_samples=sample_times, replacement=True)  # (B, sample_times)
-            one_hot = torch.nn.functional.one_hot(sampled, num_classes=Z).sum(dim=1)        # (B, Z)
-            selected = torch.topk(one_hot, k=sample_times, dim=-1).indices  # (B, sample_times)
+            print("Sampling triples for training...")  # correct multinomial behavior
+            selected = torch.multinomial(probs, num_samples=sample_times, replacement=True)  # (B, sample_times)
 
         # === Step 2: Create token-level mask ===
         selected_exp = selected.unsqueeze(-1)             # (B, sample_times, 1)
@@ -249,9 +262,28 @@ class KnowledgeSelectorBase(BaseFairseqModel):
         match_mask = selected_exp == triple_indices_exp   # (B, sample_times, T_knw)
         token_mask = match_mask.any(dim=1)                # (B, T_knw)
 
-        # === Step 3: Mask knw_tokens (replace non-selected tokens with padding_idx) ===
-        selected_knw_tokens = knw_tokens.masked_fill(~token_mask, padding_idx)  # (B, T_knw)
-        selected_knw_lengths = token_mask.sum(dim=1)
+        # === Step 3: Gather selected tokens ===
+        selected_knw_tokens_raw = knw_tokens.masked_fill(~token_mask, padding_idx)  # (B, T_knw)
+
+        # === Step 4: Left-pad to align all padding to the left ===
+        # For each row, shift valid tokens to the right
+        T_knw = knw_tokens.size(1)
+
+        selected_knw_tokens = []
+        for b in range(B):
+            tokens = selected_knw_tokens_raw[b]              # (T_knw,)
+            valid = tokens[tokens != padding_idx]            # only selected tokens
+            length = valid.size(0)
+            pad = torch.full((T_knw - length,), padding_idx, dtype=tokens.dtype, device=tokens.device)
+            left_padded = torch.cat([pad, valid], dim=0)     # (T_knw,)
+            selected_knw_tokens.append(left_padded)
+
+        selected_knw_tokens = torch.stack(selected_knw_tokens, dim=0)  # (B, T_knw)
+
+        # === Step 5: Truncate to max valid length
+        selected_knw_lengths = selected_knw_tokens.ne(padding_idx).sum(dim=1)
+        max_len = selected_knw_lengths.max().item()
+        selected_knw_tokens = selected_knw_tokens[:, -max_len:]  # (B, max_len)
 
         return selected, selected_knw_tokens, selected_knw_lengths
 
