@@ -10,7 +10,7 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # === Configuration ===
 SRC=en
 TGT=vi
-VOCAB_SIZE=8000
+VOCAB_SIZE=12000
 MODEL_PREFIX=$SCRIPT_DIR/tokenizer/envi
 DATA_DIR=$SCRIPT_DIR/kgnmt_data
 BIN_DIR=$SCRIPT_DIR/data-bin/envi-bpe
@@ -29,10 +29,8 @@ else
 fi
 
 # === Train the model ===
-# CUDA_VISIBLE_DEVICES=0,1 fairseq-train "$BIN_DIR" \
-#   --distributed-world-size 2 \
-
-fairseq-train "$BIN_DIR" \
+CUDA_VISIBLE_DEVICES=0 fairseq-train "$BIN_DIR" \
+  --distributed-world-size 1 \
   --ddp-backend no_c10d \
   --task translation_dynamic_knowledge_aug \
   --arch dynamic_kgnmt_iwslt_vi_en \
@@ -84,6 +82,3 @@ fairseq-train "$BIN_DIR" \
   # --knowledge-selector-warmup-init-lr -1.0 
 
 echo "✅ Training complete! Checkpoints saved in: $CHECKPOINT_DIR"
-
-# 1. Chỉ dùng KG tiếng anh
-# 2. Kiểm tra reward
