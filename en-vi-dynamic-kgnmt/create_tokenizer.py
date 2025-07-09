@@ -15,7 +15,6 @@ os.makedirs(os.path.dirname(model_prefix), exist_ok=True)
 
 special_tokens = [
     "<x>", "<t>", "<k>", "<r>",
-    "<en>", "<vi>" 
 ]
 
 # Train the tokenizer

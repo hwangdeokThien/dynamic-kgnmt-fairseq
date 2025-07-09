@@ -37,7 +37,7 @@ CUDA_VISIBLE_DEVICES=0,1 fairseq-train "$BIN_DIR" \
   --arch dynamic_kgnmt_iwslt_vi_en \
   --criterion label_smoothed_cross_entropy \
   --label-smoothing 0.1 \
-  --max-tokens 8192 \
+  --max-tokens 4096 \
   --max-epoch 60 \
   --max-update 100000 \
   --eval-bleu \
@@ -57,11 +57,11 @@ CUDA_VISIBLE_DEVICES=0,1 fairseq-train "$BIN_DIR" \
   --activation_fn relu \
   --attention_dropout 0.0 \
   --activation_dropout 0.0 \
-  --sample_times 15 \
-  --src_encoder_embed_dim 512 \
-  --src_encoder_layers 6 \
-  --knw_encoder_embed_dim 512 \
-  --knw_encoder_layers 6 \
+  --sample_times 3 \
+  --src_encoder_embed_dim 256 \
+  --src_encoder_layers 4 \
+  --knw_encoder_embed_dim 256 \
+  --knw_encoder_layers 4 \
   --knowledge_selector_dropout 0.1 \
   --knowledge_selector_attention_dropout 0.0 \
   --knowledge_selector_activation_dropout 0.0 \
