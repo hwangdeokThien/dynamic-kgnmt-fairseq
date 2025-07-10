@@ -184,7 +184,7 @@ def main(cfg: FairseqConfig) -> None:
         xm.rendezvous("load_checkpoint")  # wait for all workers
 
     max_epoch = cfg.optimization.max_epoch or math.inf
-    lr = trainer.get_lr()
+    ks_lr, kgnmt_lr = trainer.get_lr()
 
     # TODO: a dry run on validation set to pin the memory
     valid_subsets = cfg.dataset.valid_subset.split(",")
@@ -203,9 +203,9 @@ def main(cfg: FairseqConfig) -> None:
     train_meter = meters.StopwatchMeter()
     train_meter.start()
     while epoch_itr.next_epoch_idx <= max_epoch:
-        if lr <= cfg.optimization.stop_min_lr:
+        if kgnmt_lr <= cfg.optimization.stop_min_lr:
             logger.info(
-                f"stopping training because current learning rate ({lr}) is smaller "
+                f"stopping training because current learning rate ({kgnmt_lr}) is smaller "
                 "than or equal to minimum learning rate "
                 f"(--stop-min-lr={cfg.optimization.stop_min_lr})"
             )
@@ -218,7 +218,6 @@ def main(cfg: FairseqConfig) -> None:
 
         # only use first validation loss to update the learning rate
         ks_lr, kgnmt_lr = trainer.lr_step(epoch_itr.epoch, valid_losses[0])
-        lr = kgnmt_lr
 
         epoch_itr = trainer.get_train_iterator(
             epoch_itr.next_epoch_idx,
