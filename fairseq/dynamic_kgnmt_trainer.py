@@ -34,6 +34,13 @@ from fairseq.utils import safe_hasattr
 logger = logging.getLogger(__name__)
 
 
+# Ghi log chi tiết vào file
+DEBUG_LOG_PATH = os.path.join("debug_kgnmt.log")
+torch.set_printoptions(threshold=100000, edgeitems=100)  # In toàn bộ tensor
+
+with open(DEBUG_LOG_PATH, "a") as debug_log:
+    debug_log.write("\\n========== Train Step Start ==========\\n")
+
 class DynamicKgNMTTrainer(object):
     """Main class for data parallel training.
 
@@ -951,6 +958,9 @@ class DynamicKgNMTTrainer(object):
         has_oom = False
         logging_outputs, sample_size_total, ooms = [], 0, 0
 
+        DEBUG_LOG_PATH = os.path.join(self.cfg.checkpoint.save_dir, "debug_kgnmt.log")
+        torch.set_printoptions(threshold=100000, edgeitems=100)
+
         for i, sample in enumerate(samples):
             sample, is_dummy_batch = self._prepare_sample(sample)
 
@@ -976,6 +986,32 @@ class DynamicKgNMTTrainer(object):
 
                     # Phase 2: Train KG-NMT
                     kgnmt_loss, sample_size, kgnmt_logging_output = self._train_kgnmt_phase(modified_sample, is_dummy_batch)
+
+                    with open(DEBUG_LOG_PATH, "a") as debug_log:
+                        debug_log.write("\n================ KG-NMT PHASE ================\n")
+                        debug_log.write(f"[DEBUG] Sample ID: {sample['id']}\n")
+                        debug_log.write(f"[DEBUG] Target shape: {sample['target'].shape}\n")
+                        debug_log.write(f"[DEBUG] Non-pad tokens: {sample['target'].ne(self.model.kgnmt.decoder.padding_idx).sum().item()}\n")
+
+                        if torch.isnan(sample["target"]).any() or torch.isinf(sample["target"]).any():
+                            debug_log.write("\u2757\ufe0f NaN or Inf found in sample['target']\n")
+                            debug_log.write(f"{sample['target']}\n")
+                            raise ValueError("Target contains NaN/Inf")
+
+                        if sample["target"].max().item() >= self.model.kgnmt.decoder.output_projection.out_features:
+                            debug_log.write(f"\u2757\ufe0f OOV token in target: {sample['target'].max().item()}\n")
+                            raise ValueError("Target contains OOV token")
+
+                        debug_log.write(f"[DEBUG] kgnmt_loss: {kgnmt_loss.item() if torch.isfinite(kgnmt_loss) else 'NaN/Inf'}\n")
+                        debug_log.write("[train_step] \ud83d\udd2c Checking gradients for KG-NMT...\n")
+                        for name, param in self.model.kgnmt.named_parameters():
+                            if param.grad is not None:
+                                if torch.isnan(param.grad).any():
+                                    debug_log.write(f"\u274c NaN in gradient: {name}\n")
+                                elif torch.isinf(param.grad).any():
+                                    debug_log.write(f"\u274c Inf in gradient: {name}\n")
+                                else:
+                                    debug_log.write(f"\u2705 {name} grad OK: mean={param.grad.mean().item():.4f}, max={param.grad.abs().max().item():.4f}\n")
 
                     logging_output = {
                         **kgnmt_logging_output,
@@ -1015,22 +1051,18 @@ class DynamicKgNMTTrainer(object):
                     return None
                 logging_outputs.append({"sample_size": 0})
 
-        # Ensure sample size > 0 before reduce
         if sample_size_total == 0:
             logger.warning("sample_size_total is 0, skipping update.")
             if torch.distributed.is_initialized():
                 torch.distributed.barrier()
             return None
 
-        # Update step
         self.set_num_updates(self.get_num_updates() + 1)
 
-        # EMA step
         if self.cfg.ema.store_ema:
             self.ema.step(self.get_model(), self.get_num_updates())
             metrics.log_scalar("ema_decay", self.ema.get_decay(), priority=10000, round=5, weight=0)
 
-        # Log AMP scale
         for opt, name in [
             (self.knowledge_selector_optimizer, "ks"),
             (self.kgnmt_optimizer, "kgnmt"),
@@ -1039,14 +1071,13 @@ class DynamicKgNMTTrainer(object):
                 scale = opt.scaler.loss_scale if self.cfg.common.fp16 else opt.scaler.get_scale()
                 metrics.log_scalar(f"loss_scale_{name}", scale, priority=700, round=4, weight=0)
 
-        # Sync before reducing stats
         if torch.distributed.is_initialized():
             torch.distributed.barrier()
 
         logging_output = self._reduce_and_log_stats(logging_outputs, sample_size_total)
         metrics.log_stop_time("train_wall")
         return logging_output
-  
+
     def _train_knowledge_selector_phase(self, sample, is_dummy_batch):
         self.model.kgnmt.eval()
         self.model.knowledge_selector.train()
@@ -1106,16 +1137,37 @@ class DynamicKgNMTTrainer(object):
         self.model.knowledge_selector.eval()
         self.model.kgnmt.train()
 
+        DEBUG_LOG_PATH = os.path.join(self.cfg.checkpoint.save_dir, "debug_kgnmt.log")
+        torch.set_printoptions(threshold=100000, edgeitems=100)
+
+        with open(DEBUG_LOG_PATH, "a") as debug_log:
+            debug_log.write("\n================ KG-NMT PHASE ================\n")
+            debug_log.write(f"[DEBUG] Sample ID: {sample['id']}\n")
+            debug_log.write(f"[DEBUG] Target shape: {sample['target'].shape}\n")
+            debug_log.write(f"[DEBUG] Non-pad tokens: {sample['target'].ne(self.model.kgnmt.decoder.padding_idx).sum().item()}\n")
+
+            if torch.isnan(sample["target"]).any() or torch.isinf(sample["target"]).any():
+                debug_log.write("🚨 NaN or Inf found in sample['target']\n")
+                debug_log.write(f"{sample['target']}\n")
+                raise ValueError("Target contains NaN/Inf")
+
+            if sample["target"].max().item() >= self.model.kgnmt.decoder.output_projection.out_features:
+                debug_log.write(f"🚨 OOV token in target: {sample['target'].max().item()}\n")
+                raise ValueError("Target contains OOV token")
+
         with torch.cuda.amp.autocast(enabled=isinstance(self.kgnmt_optimizer, AMPOptimizer)):
             loss, sample_size, logging_output = self.criterion(self.model.kgnmt, sample)
             if is_dummy_batch:
-                print("dummy batch")
                 loss *= 0
 
         loss = torch.nan_to_num(loss, nan=0.0, posinf=1e3, neginf=-1e3)
 
+        with open(DEBUG_LOG_PATH, "a") as debug_log:
+            debug_log.write(f"[DEBUG] KG-NMT Loss: {loss.item()}\n")
+
         if not torch.isfinite(loss):
-            print(">>> NaN/Inf in KG-NMT loss")
+            with open(DEBUG_LOG_PATH, "a") as debug_log:
+                debug_log.write(">>> NaN/Inf in KG-NMT loss\n")
             raise FloatingPointError("KG-NMT loss is invalid")
 
         self.kgnmt_optimizer.backward(loss)
@@ -1135,6 +1187,12 @@ class DynamicKgNMTTrainer(object):
     def _process_gradients(self, optimizer, model, sample_size, tag):
         optimizer.all_reduce_grads(model)
 
+        DEBUG_LOG_PATH = os.path.join(self.cfg.checkpoint.save_dir, "debug_kgnmt.log")
+
+        with open(DEBUG_LOG_PATH, "a") as debug_log:
+            debug_log.write(f"\n---- Gradient Processing [{tag}] ----\n")
+            debug_log.write(f"Sample size: {sample_size}\n")
+
         if sample_size == 0:
             logger.warning(f"Sample size is 0 in {tag} phase, skipping gradient step.")
             return
@@ -1145,12 +1203,21 @@ class DynamicKgNMTTrainer(object):
 
         grad_norm = self.clip_grad_norm(self.cfg.optimization.clip_norm)
 
+        with open(DEBUG_LOG_PATH, "a") as debug_log:
+            debug_log.write(f"Gradient norm: {grad_norm}\n")
+
         if not self.tpu and not torch.isfinite(grad_norm).all():
+            with open(DEBUG_LOG_PATH, "a") as debug_log:
+                debug_log.write("NaN/Inf detected in gradient norm\n")
+
             for name, param in model.named_parameters():
                 if param.grad is not None and (torch.isnan(param.grad).any() or torch.isinf(param.grad).any()):
-                    logger.error(f">>> NaN/Inf in gradient of parameter: {name}")
-                    logger.error(f">>> Gradient sample: {param.grad.view(-1)[:5]}")
+                    logger.error(f"NaN/Inf in gradient of parameter: {name}")
+                    logger.error(f"Gradient sample: {param.grad.view(-1)[:5]}")
+                    with open(DEBUG_LOG_PATH, "a") as debug_log:
+                        debug_log.write(f"Param {name} grad sample: {param.grad.view(-1)[:5]}\n")
                     raise FloatingPointError("NaN/Inf in gradients.")
+
             if self.cfg.common.amp:
                 logger.warning(f"AMP Overflow in {tag}, skipping step.")
                 return
