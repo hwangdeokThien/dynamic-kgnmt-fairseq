@@ -1123,7 +1123,7 @@ class DynamicKgNMTTrainer(object):
         advantage = (reward - baseline).clamp(min=-5, max=5)
 
         log_p_t = torch.nan_to_num(ks_output["log_p_t"], nan=0.0, posinf=0.0, neginf=0.0)
-        loss = -(advantage * log_p_t).mean()
+        loss = -(advantage * log_p_t.detach()).mean()
 
         debug_logger.info(f"[KS] log_p_t: {ks_output['log_p_t'][:5]}")
         debug_logger.info(f"[KS] reward: {reward[:5]}")
@@ -1237,9 +1237,10 @@ class DynamicKgNMTTrainer(object):
 
         numer = self.data_parallel_world_size if not self.cfg.optimization.use_bmuf else 1
         denom = sample_size if sample_size > 0 else 1.0
+        debug_logger.info(f"[{tag}] multiply_grads scale factor: {numer}/{denom} = {numer / denom:.6f}")
         optimizer.multiply_grads(numer / denom)
 
-        grad_norm = self.clip_grad_norm(self.cfg.optimization.clip_norm)
+        grad_norm = self.clip_grad_norm(self.cfg.optimization.clip_norm, optimizer)
 
         debug_logger.info(f"Gradient norm: {grad_norm}\n")
 
@@ -1461,7 +1462,7 @@ class DynamicKgNMTTrainer(object):
             self.quantizer.step_update(self._num_updates)
         metrics.log_scalar("num_updates", self._num_updates, weight=0, priority=200)
 
-    def clip_grad_norm(self, clip_norm):
+    def clip_grad_norm(self, clip_norm, optimizer):
         def agg_norm_fn(total_norm):
             total_norm = total_norm.cuda().float() ** 2
             total_norm = distributed_utils.all_reduce(
@@ -1473,9 +1474,11 @@ class DynamicKgNMTTrainer(object):
             self.data_parallel_process_group is not None
             or torch.distributed.is_initialized()
         )
-        return self.kgnmt_optimizer.clip_grad_norm(
+
+        return optimizer.clip_grad_norm(
             clip_norm, aggregate_norm_fn=agg_norm_fn if should_agg_norm else None
         )
+
 
     def cumulative_training_time(self):
         if self._cumulative_training_time is None:

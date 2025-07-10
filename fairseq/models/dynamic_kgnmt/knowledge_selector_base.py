@@ -202,7 +202,6 @@ class KnowledgeSelectorBase(BaseFairseqModel):
         log_probs = torch.log(probs + 1e-8)  # (B, Z)
         log_p_t = log_probs.gather(dim=1, index=selected_triple_ids)  # (B, sample_times)
         log_p_t = log_p_t.mean(dim=1)  # (B,)
-        print("log_p_t requires_grad:", log_p_t.requires_grad)
 
         return {
             # "triple_probs": probs,          # p(t_i | X)
