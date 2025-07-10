@@ -1123,7 +1123,7 @@ class DynamicKgNMTTrainer(object):
         advantage = (reward - baseline).clamp(min=-5, max=5)
 
         log_p_t = torch.nan_to_num(ks_output["log_p_t"], nan=0.0, posinf=0.0, neginf=0.0)
-        loss = -(advantage * log_p_t.detach()).mean()
+        loss = -(advantage * log_p_t).mean()
 
         debug_logger.info(f"[KS] log_p_t: {ks_output['log_p_t'][:5]}")
         debug_logger.info(f"[KS] reward: {reward[:5]}")
