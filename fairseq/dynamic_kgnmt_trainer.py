@@ -33,22 +33,6 @@ from fairseq.utils import safe_hasattr
 
 logger = logging.getLogger(__name__)
 
-def setup_logger(log_path="debug_kgnmt.log", level=logging.DEBUG):
-    logger = logging.getLogger("debug_kgnmt")
-    logger.setLevel(level)
-    fh = logging.FileHandler(log_path, mode="a")
-    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-    fh.setFormatter(formatter)
-    logger.addHandler(fh)
-    logger.propagate = False
-    return logger
-
-# Gọi ngay ở đầu file
-LOG_PATH = os.path.join("./", "debug_kgnmt.log")
-debug_logger = setup_logger(LOG_PATH)
-
-debug_logger.info("\\n========== Train Step Start ==========\\n")
-
 class DynamicKgNMTTrainer(object):
     """Main class for data parallel training.
 
@@ -995,30 +979,11 @@ class DynamicKgNMTTrainer(object):
                     # Phase 2: Train KG-NMT
                     kgnmt_loss, sample_size, kgnmt_logging_output = self._train_kgnmt_phase(modified_sample, is_dummy_batch)
 
-                    debug_logger.info("\n================ KG-NMT PHASE ================\n")
-                    debug_logger.info(f"[DEBUG] Sample ID: {sample['id']}\n")
-                    debug_logger.info(f"[DEBUG] Target shape: {sample['target'].shape}\n")
-                    debug_logger.info(f"[DEBUG] Non-pad tokens: {sample['target'].ne(self.model.kgnmt.decoder.padding_idx).sum().item()}\n")
-
                     if torch.isnan(sample["target"]).any() or torch.isinf(sample["target"]).any():
-                        debug_logger.info("NaN or Inf found in sample['target']\n")
-                        debug_logger.info(f"{sample['target']}\n")
                         raise ValueError("Target contains NaN/Inf")
 
                     if sample["target"].max().item() >= self.model.kgnmt.decoder.output_projection.out_features:
-                        debug_logger.info(f"OOV token in target: {sample['target'].max().item()}\n")
                         raise ValueError("Target contains OOV token")
-
-                    debug_logger.info(f"[DEBUG] kgnmt_loss: {kgnmt_loss.item() if torch.isfinite(kgnmt_loss) else 'NaN/Inf'}\n")
-                    debug_logger.info("[train_step] Checking gradients for KG-NMT...\n")
-                    for name, param in self.model.kgnmt.named_parameters():
-                        if param.grad is not None:
-                            if torch.isnan(param.grad).any():
-                                debug_logger.info(f"NaN in gradient: {name}\n")
-                            elif torch.isinf(param.grad).any():
-                                debug_logger.info(f"Inf in gradient: {name}\n")
-                            else:
-                                debug_logger.info(f"{name} grad OK: mean={param.grad.mean().item():.4f}, max={param.grad.abs().max().item():.4f}\n")
 
                     logging_output = {
                         **kgnmt_logging_output,
@@ -1086,17 +1051,8 @@ class DynamicKgNMTTrainer(object):
         return logging_output
 
     def _train_knowledge_selector_phase(self, sample, is_dummy_batch):
-        debug_logger.info("\n================ KS PHASE ================\n")
         self.model.kgnmt.eval()
         self.model.knowledge_selector.train()
-        debug_logger.info(f"[DEBUG] src_tokens shape: {sample['net_input']['src_tokens_ks'].shape}")
-        debug_logger.info(f"[DEBUG] src_tokens (first 2):\n{sample['net_input']['src_tokens_ks'][:2]}")
-        debug_logger.info(f"[DEBUG] src_lengths: {sample['net_input']['src_lengths_ks']}\n")
-
-        debug_logger.info(f"[DEBUG] knw_tokens shape: {sample['net_input']['knw_tokens'].shape}")
-        debug_logger.info(f"[DEBUG] knw_tokens (first 2):\n{sample['net_input']['knw_tokens'][:2]}")
-        debug_logger.info(f"[DEBUG] knw_lengths: {sample['net_input']['knw_lengths']}\n")
-
 
         with torch.cuda.amp.autocast(enabled=isinstance(self.knowledge_selector_optimizer, AMPOptimizer)):
             ks_output = self.model.knowledge_selector(
@@ -1125,29 +1081,11 @@ class DynamicKgNMTTrainer(object):
         log_p_t = torch.nan_to_num(ks_output["log_p_t"], nan=0.0, posinf=0.0, neginf=0.0)
         loss = -(advantage * log_p_t).mean()
 
-        debug_logger.info(f"[KS] log_p_t: {ks_output['log_p_t'][:5]}")
-        debug_logger.info(f"[KS] reward: {reward[:5]}")
-        debug_logger.info(f"[KS] baseline: {baseline.item()}")
-        debug_logger.info(f"[KS] advantage: {(reward - baseline)[:5]}")
-        debug_logger.info(f"[KS] loss: {loss.item()}")
-
         if not torch.isfinite(loss):
             print(">>> NaN/Inf in KS loss")
             raise FloatingPointError("KS loss is invalid")
 
         self.knowledge_selector_optimizer.backward(loss)
-
-        debug_logger.info("[train_step] Checking gradients for Knowledge Selector...\n")
-        for name, param in self.model.knowledge_selector.named_parameters():
-            if param.grad is not None:
-                if torch.isnan(param.grad).any():
-                    debug_logger.info(f"[KS] NaN in gradient: {name}\n")
-                elif torch.isinf(param.grad).any():
-                    debug_logger.info(f"[KS] Inf in gradient: {name}\n")
-                else:
-                    debug_logger.info(f"[KS] {name} grad OK: mean={param.grad.mean().item():.4f}, max={param.grad.abs().max().item():.4f}\n")
-            else:
-                debug_logger.info(f"[KS] No gradient for param: {name}\n")
 
         if not is_dummy_batch:
             self._process_gradients(
@@ -1171,29 +1109,11 @@ class DynamicKgNMTTrainer(object):
         self.model.knowledge_selector.eval()
         self.model.kgnmt.train()
 
-        DEBUG_LOG_PATH = os.path.join(self.cfg.checkpoint.save_dir, "debug_kgnmt.log")
-        torch.set_printoptions(threshold=100000, edgeitems=100)
-
-        debug_logger.info("\n================ KG-NMT PHASE ================\n")
-        debug_logger.info(f"[DEBUG] Sample ID: {sample['id']}\n")
-        debug_logger.info(f"[DEBUG] Target shape: {sample['target'].shape}\n")
-        debug_logger.info(f"[DEBUG] Non-pad tokens: {sample['target'].ne(self.model.kgnmt.decoder.padding_idx).sum().item()}\n")
-
-        debug_logger.info(f"[DEBUG] src_tokens shape: {sample['net_input']['src_tokens'].shape}")
-        debug_logger.info(f"[DEBUG] src_tokens (first 2):\n{sample['net_input']['src_tokens'][:2]}")
-        debug_logger.info(f"[DEBUG] src_lengths: {sample['net_input']['src_lengths']}\n")
-
-        debug_logger.info(f"[DEBUG] knw_tokens shape: {sample['net_input']['knw_tokens'].shape}")
-        debug_logger.info(f"[DEBUG] knw_tokens (first 2):\n{sample['net_input']['knw_tokens'][:2]}")
-        debug_logger.info(f"[DEBUG] knw_lengths: {sample['net_input']['knw_lengths']}\n")
 
         if torch.isnan(sample["target"]).any() or torch.isinf(sample["target"]).any():
-            debug_logger.info("NaN or Inf found in sample['target']\n")
-            debug_logger.info(f"{sample['target']}\n")
             raise ValueError("Target contains NaN/Inf")
 
         if sample["target"].max().item() >= self.model.kgnmt.decoder.output_projection.out_features:
-            debug_logger.info(f"OOV token in target: {sample['target'].max().item()}\n")
             raise ValueError("Target contains OOV token")
 
         with torch.cuda.amp.autocast(enabled=isinstance(self.kgnmt_optimizer, AMPOptimizer)):
@@ -1203,10 +1123,7 @@ class DynamicKgNMTTrainer(object):
 
         loss = torch.nan_to_num(loss, nan=0.0, posinf=1e3, neginf=-1e3)
 
-        debug_logger.info(f"[DEBUG] KG-NMT Loss: {loss.item()}\n")
-
         if not torch.isfinite(loss):
-            debug_logger.info(">>> NaN/Inf in KG-NMT loss\n")
             raise FloatingPointError("KG-NMT loss is invalid")
 
         self.kgnmt_optimizer.backward(loss)
@@ -1226,34 +1143,18 @@ class DynamicKgNMTTrainer(object):
     def _process_gradients(self, optimizer, model, sample_size, tag):
         optimizer.all_reduce_grads(model)
 
-        DEBUG_LOG_PATH = os.path.join(self.cfg.checkpoint.save_dir, "debug_kgnmt.log")
-
-        debug_logger.info(f"\n---- Gradient Processing [{tag}] ----\n")
-        debug_logger.info(f"Sample size: {sample_size}\n")
-
         if sample_size == 0:
             logger.warning(f"Sample size is 0 in {tag} phase, skipping gradient step.")
             return
 
         numer = self.data_parallel_world_size if not self.cfg.optimization.use_bmuf else 1
         denom = sample_size if sample_size > 0 else 1.0
-        debug_logger.info(f"[{tag}] multiply_grads scale factor: {numer}/{denom} = {numer / denom:.6f}")
         optimizer.multiply_grads(numer / denom)
 
         grad_norm = self.clip_grad_norm(self.cfg.optimization.clip_norm, optimizer)
 
-        debug_logger.info(f"Gradient norm: {grad_norm}\n")
 
         if not self.tpu and not torch.isfinite(grad_norm).all():
-            debug_logger.info("NaN/Inf detected in gradient norm\n")
-
-            for name, param in model.named_parameters():
-                if param.grad is not None and (torch.isnan(param.grad).any() or torch.isinf(param.grad).any()):
-                    logger.error(f"NaN/Inf in gradient of parameter: {name}")
-                    logger.error(f"Gradient sample: {param.grad.view(-1)[:5]}")
-                    debug_logger.info(f"Param {name} grad sample: {param.grad.view(-1)[:5]}\n")
-                    raise FloatingPointError("NaN/Inf in gradients.")
-
             if self.cfg.common.amp:
                 logger.warning(f"AMP Overflow in {tag}, skipping step.")
                 return
@@ -1268,11 +1169,6 @@ class DynamicKgNMTTrainer(object):
         lprobs = model.get_normalized_probs(decoder_out, log_probs=True)
         target = sample["target"]
         pad_mask = target.ne(model.decoder.padding_idx)
-
-        if pad_mask.sum() == 0:
-            self.debug_logger.warning("⚠ Pad mask toàn 0! Target toàn pad?")
-            self.debug_logger.warning(f"Target tensor:\n{target}")
-
         lprobs_for_target = lprobs.gather(dim=-1, index=target.unsqueeze(-1)).squeeze(-1)
         log_prob_per_sample = (lprobs_for_target * pad_mask).sum(dim=1)
         return log_prob_per_sample
@@ -1398,7 +1294,7 @@ class DynamicKgNMTTrainer(object):
 
     def get_lr(self):
         """Get the current learning rate."""
-        return self.kgnmt_optimizer.get_lr()
+        return (self.knowledge_selector_optimizer.get_lr(), self.kgnmt_optimizer.get_lr())
 
     def get_model(self):
         """Get the (non-wrapped) model instance."""
