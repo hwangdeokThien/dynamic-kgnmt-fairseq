@@ -858,10 +858,55 @@ class EnsembleModel(nn.Module):
         knw_input = {
             "src_tokens": net_input["knw_tokens"],
             "src_lengths": net_input["knw_lengths"],
+            "knw_sep": True,
         }
 
         src_encoder_outs = [self.single_model.kgnmt.encoder.forward_torchscript(src_input)]
-        knw_encoder_outs = [self.single_model.kgnmt.knw_encoder.forward_torchscript(knw_input)] 
+        knw_encoder_out = self.single_model.kgnmt.knw_encoder.forward_torchscript(knw_input)
+        knw_z_lengths = selector_output["knw_z_lengths"]
+
+        knw_enc = knw_encoder_out["encoder_out"][0]  # (T_knw, B, C)
+        knw_enc = knw_enc.transpose(0, 1)  # (B, T_knw, C)
+        triple_indices = knw_encoder_out["triple_indices"][0]  # (B, T_knw)
+        triple_indices = triple_indices.to(knw_enc.device)
+
+        B, T_knw, C = knw_enc.size()
+        device = knw_enc.device
+        Z = triple_indices.max().item() + 1  # number of triples per example
+
+        # === Efficient triple aggregation using index_add ===
+        flat_enc = knw_enc.reshape(B * T_knw, C)          # (B*T, C)
+        flat_indices = triple_indices.reshape(B * T_knw)  # (B*T,)
+        valid_mask = flat_indices >= 0
+
+        flat_enc_valid = flat_enc[valid_mask]
+        flat_indices_valid = flat_indices[valid_mask]
+
+        batch_ids = torch.arange(B, device=device).unsqueeze(1).repeat(1, T_knw).reshape(-1)
+        batch_ids = batch_ids[valid_mask]
+        global_indices = batch_ids * Z + flat_indices_valid  # (N_valid,)
+
+        z_sum = torch.zeros(B * Z, C, device=device)
+        z_sum.index_add_(0, global_indices, flat_enc_valid)
+
+        flat_ones = torch.ones_like(flat_indices_valid, dtype=torch.float).unsqueeze(1)  # (N_valid, 1)
+        z_count = torch.zeros(B * Z, 1, device=device)
+        z_count.index_add_(0, global_indices, flat_ones)
+
+        z_mean = z_sum / (z_count + 1e-6)
+        z_mean = z_mean.reshape(B, Z, C)
+
+        # === Create new padding mask ===
+        max_len = knw_z_lengths.max().item()
+        idx = torch.arange(max_len, device=knw_z_lengths.device).unsqueeze(0) # (1, T)
+        pad_left = max_len - knw_z_lengths.unsqueeze(1) # (B, 1)
+        mask = idx < pad_left
+
+        z_mean = z_mean.transpose(0, 1)
+        knw_encoder_out["encoder_out"] = [z_mean] # [Z x B x C]
+        knw_encoder_out["encoder_padding_mask"] = [mask]
+
+        knw_encoder_outs = [knw_encoder_out] 
 
         return (src_encoder_outs, knw_encoder_outs)
 

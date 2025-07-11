@@ -1062,6 +1062,17 @@ class DynamicKgNMTTrainer(object):
                 sample["net_input"]["knw_lengths"],
                 sample_times=getattr(self.cfg.task, 'sample_times', 5),
             )
+            
+            # Detach selected triples to avoid accidental backward
+            ks_output["selected_knw_tokens"] = ks_output["selected_knw_tokens"].detach()
+            ks_output["selected_knw_lengths"] = ks_output["selected_knw_lengths"].detach()
+            ks_output["knw_z_lengths"] = ks_output["knw_z_lengths"].detach()
+
+            del sample["net_input"]["src_tokens_ks"]
+            del sample["net_input"]["src_lengths_ks"]
+            sample["net_input"]["knw_tokens"] = ks_output["selected_knw_tokens"]
+            sample["net_input"]["knw_lengths"] = ks_output["selected_knw_lengths"]
+            sample["net_input"]["knw_z_lengths"] = ks_output["knw_z_lengths"]
 
             with torch.no_grad():
                 reward = self._compute_log_prob_of_target(self.model.kgnmt, sample)
@@ -1069,10 +1080,6 @@ class DynamicKgNMTTrainer(object):
         # Normalize and protect reward
         reward = reward.detach()
         reward = torch.nan_to_num(reward, nan=0.0, posinf=1.0, neginf=-1.0)
-
-        # Detach selected triples to avoid accidental backward
-        ks_output["selected_knw_tokens"] = ks_output["selected_knw_tokens"].detach()
-        ks_output["selected_knw_lengths"] = ks_output["selected_knw_lengths"].detach()
 
         # Compute loss with clipped advantage
         baseline = reward.mean()
@@ -1098,17 +1105,12 @@ class DynamicKgNMTTrainer(object):
             self.knowledge_selector_optimizer.zero_grad()
 
         # Clean up input to avoid redundant memory
-        del sample["net_input"]["src_tokens_ks"]
-        del sample["net_input"]["src_lengths_ks"]
-        sample["net_input"]["knw_tokens"] = ks_output["selected_knw_tokens"]
-        sample["net_input"]["knw_lengths"] = ks_output["selected_knw_lengths"]
 
         return loss, reward, sample
 
     def _train_kgnmt_phase(self, sample, is_dummy_batch):
         self.model.knowledge_selector.eval()
         self.model.kgnmt.train()
-
 
         if torch.isnan(sample["target"]).any() or torch.isinf(sample["target"]).any():
             raise ValueError("Target contains NaN/Inf")
@@ -1198,6 +1200,7 @@ class DynamicKgNMTTrainer(object):
                 del sample["net_input"]["src_lengths_ks"]
                 sample["net_input"]["knw_tokens"] = selector_output["selected_knw_tokens"]
                 sample["net_input"]["knw_lengths"] = selector_output["selected_knw_lengths"]
+                sample["net_input"]["knw_z_lengths"] = selector_output["knw_z_lengths"]
 
                 # === 3. Forward through KgNMT only ===
                 net_output = self.model.kgnmt(**sample["net_input"])
