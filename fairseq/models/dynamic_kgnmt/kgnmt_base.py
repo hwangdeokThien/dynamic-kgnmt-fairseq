@@ -232,7 +232,7 @@ class KgNMTModelBase(BaseFairseqModel):
         idx = torch.arange(max_len, device=knw_z_lengths.device).unsqueeze(0) # (1, T)
         pad_left = max_len - knw_z_lengths.unsqueeze(1) # (B, 1)
         mask = idx < pad_left
-
+        
         z_mean = z_mean.transpose(0, 1)
         knw_encoder_out["encoder_out"] = [z_mean] # [Z x B x C]
         knw_encoder_out["encoder_padding_mask"] = [mask]

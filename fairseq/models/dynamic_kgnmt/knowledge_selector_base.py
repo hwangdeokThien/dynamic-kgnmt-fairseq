@@ -188,6 +188,8 @@ class KnowledgeSelectorBase(BaseFairseqModel):
 
         # === Compute triple scores ===
         scores = torch.bmm(z_mean, c_x.unsqueeze(2)).squeeze(-1)  # (B, Z)
+        valid_mask = z_count.view(B, Z).gt(0)  # (B, Z)
+        scores = scores.masked_fill(~valid_mask, float('-inf')) 
         probs = torch.softmax(scores, dim=-1)                     # (B, Z)
 
         # === Sample triples ===
