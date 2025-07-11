@@ -172,6 +172,7 @@ class KgNMTModelBase(BaseFairseqModel):
         src_lengths,
         knw_tokens,
         knw_lengths,
+        knw_z_lengths,
         prev_output_tokens,
         return_all_hiddens: bool = True,
         features_only: bool = False,
@@ -187,9 +188,55 @@ class KgNMTModelBase(BaseFairseqModel):
         encoder_out = self.encoder(
             src_tokens, src_lengths=src_lengths, return_all_hiddens=return_all_hiddens
         )
+
         knw_encoder_out = self.knw_encoder(
-            knw_tokens, src_lengths=knw_lengths, return_all_hiddens=return_all_hiddens
+            knw_tokens, 
+            src_lengths=knw_lengths, 
+            knw_sep=True,
+            return_all_hiddens=return_all_hiddens
         )
+
+        knw_enc = knw_encoder_out["encoder_out"][0]  # (T_knw, B, C)
+        knw_enc = knw_enc.transpose(0, 1)  # (B, T_knw, C)
+        triple_indices = knw_encoder_out["triple_indices"][0]  # (B, T_knw)
+        triple_indices = triple_indices.to(knw_enc.device)
+
+        B, T_knw, C = knw_enc.size()
+        device = knw_enc.device
+        Z = triple_indices.max().item() + 1  # number of triples per example
+
+        # === Efficient triple aggregation using index_add ===
+        flat_enc = knw_enc.reshape(B * T_knw, C)          # (B*T, C)
+        flat_indices = triple_indices.reshape(B * T_knw)  # (B*T,)
+        valid_mask = flat_indices >= 0
+
+        flat_enc_valid = flat_enc[valid_mask]
+        flat_indices_valid = flat_indices[valid_mask]
+
+        batch_ids = torch.arange(B, device=device).unsqueeze(1).repeat(1, T_knw).reshape(-1)
+        batch_ids = batch_ids[valid_mask]
+        global_indices = batch_ids * Z + flat_indices_valid  # (N_valid,)
+
+        z_sum = torch.zeros(B * Z, C, device=device)
+        z_sum.index_add_(0, global_indices, flat_enc_valid)
+
+        flat_ones = torch.ones_like(flat_indices_valid, dtype=torch.float).unsqueeze(1)  # (N_valid, 1)
+        z_count = torch.zeros(B * Z, 1, device=device)
+        z_count.index_add_(0, global_indices, flat_ones)
+
+        z_mean = z_sum / (z_count + 1e-6)
+        z_mean = z_mean.reshape(B, Z, C)
+
+        # === Create new padding mask ===
+        max_len = knw_z_lengths.max().item()
+        idx = torch.arange(max_len, device=knw_z_lengths.device).unsqueeze(0) # (1, T)
+        pad_left = max_len - knw_z_lengths.unsqueeze(1) # (B, 1)
+        mask = idx < pad_left
+
+        z_mean = z_mean.transpose(0, 1)
+        knw_encoder_out["encoder_out"] = [z_mean] # [Z x B x C]
+        knw_encoder_out["encoder_padding_mask"] = [mask]
+
         decoder_out = self.decoder(
             prev_output_tokens,
             encoder_out=encoder_out,

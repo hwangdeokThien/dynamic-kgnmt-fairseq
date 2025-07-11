@@ -464,8 +464,6 @@ class KgNMTDecoderLayerBase(nn.Module):
             need_weights=False,
             attn_mask=self_attn_mask,
         )
-        # these 2 below is not meant to be, just dont for us
-        ############################################################
         if self.c_attn is not None:
             tgt_len, bsz = x.size(0), x.size(1)
             x = x.view(tgt_len, bsz, self.nh, self.head_dim)
@@ -473,7 +471,6 @@ class KgNMTDecoderLayerBase(nn.Module):
             x = x.reshape(tgt_len, bsz, self.embed_dim)
         if self.attn_ln is not None:
             x = self.attn_ln(x)
-        ############################################################
 
         x = self.dropout_module(x)
         x = self.residual_connection(x, residual)

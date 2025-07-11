@@ -59,6 +59,7 @@ class KgNMTKnowledgeEncoderBase(FairseqEncoder):
         embed_dim = embed_tokens.embedding_dim
         self.padding_idx = embed_tokens.padding_idx
         self.knw_sep_idx = self.dictionary.index("<k>")
+        self.eos_idx = self.dictionary.eos()
 
         self.max_source_positions = cfg.max_source_positions
 
@@ -265,12 +266,12 @@ class KgNMTKnowledgeEncoderBase(FairseqEncoder):
 
         triple_indices = torch.zeros_like(src_tokens, dtype=torch.long)
         if knw_sep:
-            is_sep = (src_tokens == self.knw_sep_idx) & (~src_tokens.eq(self.padding_idx))
+            is_sep = (src_tokens == self.knw_sep_idx) & (src_tokens.ne(self.padding_idx))
             triple_indices = is_sep.cumsum(dim=1)
-            triple_indices.masked_fill_(src_tokens.eq(self.padding_idx), 0)  # keep pads as 0
-            triple_indices = triple_indices.transpose(0, 1)  # T x B
+            triple_indices.masked_fill_((src_tokens == self.knw_sep_idx) | (src_tokens.eq(self.padding_idx)), -1)
+            triple_indices.masked_fill_(src_tokens.eq(self.eos_idx), -2)
         else:
-            triple_indices = triple_indices.transpose(0, 1)  # T x B (all 0s)
+            triple_indices = triple_indices
 
         return {
             "encoder_out": [x],  # T x B x C
@@ -280,7 +281,7 @@ class KgNMTKnowledgeEncoderBase(FairseqEncoder):
             "fc_results": fc_results,  # List[T x B x C]
             "src_tokens": [],
             "src_lengths": [src_lengths],
-            "triple_indices": [triple_indices],  # T x B
+            "triple_indices": [triple_indices],  # B x T
         }
 
     @torch.jit.export
