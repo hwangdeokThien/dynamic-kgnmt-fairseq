@@ -355,7 +355,7 @@ class KnowledgeSelectorConfig(FairseqDataclass):
     
     # Sample times for selecting triples
     sample_times: int = field(
-        default=30, metadata={"help": "Number of times to sample knowledge triples"}
+        default=5, metadata={"help": "Number of times to sample knowledge triples"}
     )
     relu_dropout: float = 0.0
     # Two independent encoders

@@ -379,7 +379,7 @@ class FairseqTask(object):
         args,
         seq_gen_cls=None,
         knowledge_aug=False,
-        sample_times=15,
+        sample_times=5,
         extra_gen_cls_kwargs=None,
         prefix_allowed_tokens_fn=None,
     ):

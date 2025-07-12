@@ -301,7 +301,7 @@ class TranslationDynamicKnowledgeAugConfig(FairseqDataclass):
         default=False, metadata={"help": "print sample generations during validation"}
     )
     sample_times: int = field(
-        default=15, metadata={"help": "sample triples times"}
+        default=5, metadata={"help": "sample triples times"}
     )
 
 
@@ -487,7 +487,7 @@ class TranslationKnowledgeAugTask(FairseqTask):
                         net_input["src_lengths"],
                         net_input["knw_tokens"],
                         net_input["knw_lengths"],
-                        sample_times=self.cfg.sample_times if self.cfg.sample_times else 15,  # or hardcode e.g., 5
+                        sample_times=self.cfg.sample_times if self.cfg.sample_times else 5,  # or hardcode e.g., 5
                 )
                 # TODO_THESIS: calculate reward from kgnmt_output, update knowledge selector
                 with torch.no_grad():
