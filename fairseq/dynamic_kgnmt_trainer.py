@@ -143,6 +143,7 @@ class DynamicKgNMTTrainer(object):
         self._wrapped_criterion = None
         self._wrapped_model = None
         self._ema = None
+        self._running_baseline = None
 
         # TODO(myleott): support tpu
         if self.cuda and self.data_parallel_world_size > 1:
@@ -1077,13 +1078,21 @@ class DynamicKgNMTTrainer(object):
             with torch.no_grad():
                 reward = self._compute_log_prob_of_target(self.model.kgnmt, sample)
 
+       
+        if not torch.isfinite(reward).all():
+            logger.warning("⚠️ Reward contains NaN/Inf, skipping baseline update and loss computation")
+            return None, reward, sample
+        
         # Normalize and protect reward
-        reward = reward.detach()
-        reward = torch.nan_to_num(reward, nan=0.0, posinf=1.0, neginf=-1.0)
+        current_mean = reward.mean().item()
+        if self.running_baseline is None:
+            self.running_baseline = current_mean
+        else:
+            momentum = 0.9
+            self.running_baseline = momentum * self.running_baseline + (1 - momentum) * current_mean
 
         # Compute loss with clipped advantage
-        baseline = reward.mean()
-        advantage = (reward - baseline).clamp(min=-5, max=5)
+        advantage = (reward - self.running_baseline).clamp(min=-5, max=5)
 
         log_p_t = torch.nan_to_num(ks_output["log_p_t"], nan=0.0, posinf=0.0, neginf=0.0)
         loss = -(advantage * log_p_t).mean()
