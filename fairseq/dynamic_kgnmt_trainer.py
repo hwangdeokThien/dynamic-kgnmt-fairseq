@@ -1085,14 +1085,14 @@ class DynamicKgNMTTrainer(object):
         
         # Normalize and protect reward
         current_mean = reward.mean().item()
-        if self.running_baseline is None:
-            self.running_baseline = current_mean
+        if self._running_baseline is None:
+            self._running_baseline = current_mean
         else:
             momentum = 0.9
-            self.running_baseline = momentum * self.running_baseline + (1 - momentum) * current_mean
+            self._running_baseline = momentum * self._running_baseline + (1 - momentum) * current_mean
 
         # Compute loss with clipped advantage
-        advantage = (reward - self.running_baseline).clamp(min=-5, max=5)
+        advantage = (reward - self._running_baseline).clamp(min=-5, max=5)
 
         log_p_t = torch.nan_to_num(ks_output["log_p_t"], nan=0.0, posinf=0.0, neginf=0.0)
         loss = -(advantage * log_p_t).mean()
