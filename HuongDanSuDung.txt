@@ -1,0 +1,110 @@
+HƯỚNG DẪN SỬ DỤNG PHƯƠNG PHÁP
+
+Quá trình huấn luyện của phương pháp được tách ra làm 2 giai đoạn riêng biệt để xử lý nhằm linh hoạt hơn trong việc huấn luyện
+
+I. Trích xuất đồ thị tri thức cục bộ:
+* Data yêu cầu: 
+Data song ngữ bên trong thư mục src/dynamic-kgnmt-fairseq/en-vi-dynamic-kgnmt:
+    -- en-vi-dynamic-kgnmt
+            |
+            |-- kgnmt_data
+            |       |
+            |       |-- train.en
+            |       |-- train.vi
+            |       |-- valid.en
+            |       |-- valid.vi
+            |       |-- test.en
+            |       |-- test.vi
+Data KG: 
+Data kg bên trong thư mục src/extract-local-kg:
+    -- extract-local-kg
+            |
+            |--  data-kg
+            |       |
+            |       |--kg_trans.txt
+            |       |--wikidata5m_all_triplet.txt           
+            |       |--wikidata5m_entity.txt       
+            |       |--wikidata5m_relation.txt
+
+Mã nguồn:
+    -- extract-local-kg
+            |--  data-kg/...
+            |
+            |--    ner
+            |       |
+            |       |-- decode_triple.py
+            |       |-- extract_id_entity.py
+            |       |-- extract_triple_id.py
+            |       |-- kg_BERT_NER.py
+            |       |-- kg_spaCy_NER.py
+            |       |-- preprocess_kg_NER.py
+            |
+            |--  similar
+            |       |
+            |       |-- decode_all_triple.py
+            |       |-- decode_langdetect_triple.py
+            |       |-- extract_popular_rare_random.py
+            |       |-- kg_similar.py
+            |       |-- langdetect.py
+               
+Có 2 cách trích xuất:
+    1. Để trích xuất bằng similarity (áp dụng cho trích xuất kg tiếng anh và kg dịch thuật), hãy đảm bảo đường dẫn của bạn đang nằm ở trong thư mục src/extract-local-kg/similar, sau đó hãy sử dụng các lệnh sau:
+    - chmod +x similar_extract.sh
+    - ./similar_extract.sh
+
+    2. Để trích xuất bằng mô hình NER (chỉ áp dụng trích xuất kg tiếng anh), hãy đảm bảo đường dẫn của bạn đang nằm ở trong thư mục src/extract-local-kg/ner, sau đó hãy sử dụng 1 trong 2 cách sau:
+        a. Sử dụng mô hình BERT pretrained:
+        - chmod +x bert_ner_extract.sh
+        - ./bert_ner_extract.sh
+
+        b. Sử dụng mô hình của thư viện spaCy:
+        - chmod +x spacy_ner_extract.sh
+        - ./spacy_ner_extract.sh
+
+II. Cài đặt thực nghiệm mô hình:
+Từ các dữ liệu đã có ở trên ...
+
+    1. Chuẩn bị dữ liệu:
+    Để thực hiện huấn luyện và đánh giá, ta cần đảm bảo dữ liệu được tổ chức như sau bên trong thư mục src/dynamic-kgnmt-fairseq/en-vi-dynamic-kgnmt:
+    -- en-vi-dynamic-kgnmt
+                |
+                |-- kgnmt_data
+                |       |
+                |       |-- train.en
+                |       |-- train.vi
+                |       |-- train.kg
+                |       |-- valid.en
+                |       |-- valid.vi
+                |       |-- valid.kg
+                |       |-- test.en
+                |       |-- test.vi
+                |       |-- test.kg
+
+    2. Thực hiện huấn luyện và đánh giá:
+    Hãy đảm bảo đường dẫn của bạn đang nằm ở thư mục en-vi-dynamic-kgnmt.
+    
+    Quá trình huấn luyện và đánh giá được chia làm 3 bước, ta có thể chạy cả 3 quá trình này bằng cách sử dụng các câu lệnh:
+    - chmod +x dynamic_kgnmgt_flow.sh
+    - ./dynamic_kgnmgt_flow.sh
+    
+    Hoặc có thể chạy riêng lẻ từng giai đoạn với các câu lệnh sau:
+        a. Giai đoạn xử lý dữ liệu:
+        - chmod +x prepare_dynamic_kgnmt_envi.sh
+        - ./prepare_dynamic_kgnmt_envi.sh
+
+        Dữ liệu sau khi xử lý sẽ nằm trong thư mục data-bin/envi-bpe
+
+        b. Giai đoạn huấn luyện:
+        - chmod +x train_dynamic_kgnmt_envi.sh
+        - ./train_dynamic_kgnmt_envi.sh
+
+        Các checkpoint sẽ được lưu tại thư mục checkpoints/envi-dynamic-kgnmt. Hãy đổi tên thư envi-dynamic-kgnmt ở mỗi lần chạy để tránh bị trùng lặp.
+
+        c. Giai đoạn đánh giá:
+        - chmod +x eval_dynamic_kgnmt_envi.sh
+        - ./eval_dynamic_kgnmt_envi.sh
+
+        Kết quả đánh giá sẽ được lưu tại output: generate-test.txt
+
+
+LƯU Ý: Các cấu hình và cài đặt cụ thể được nêu trong mỗi bash file, nếu cần điều chỉnh thêm thì ta thực hiện ở các bash file phía trên.

@@ -1,0 +1,32 @@
+HƯỚNG DẪN CÀI ĐẶT PHƯƠNG PHÁP
+
+I. Môi trường
+Ta cần thiết lập môi trường để chạy mã python và các thư viện dựa trên ngôn ngữ này. Để tạo môi trường chạy python, ta có nhiều cách cài đặt khác nhau, nhưng nhóm tôi sẽ thực hiện bằng cách sử dụng conda.
+    1. Ta thực hiện cài đặt conda theo hướng dẫn trên documents của conda theo link sau: https://docs.conda.io/projects/conda/en/stable/user-guide/install/index.html
+    2. Giả sử ta đã có conda, ta sẽ tạo một môi trường ảo để thực hiện chạy code trên đó, ta lần lượt sử dụng các câu lệnh bên dưới (tạo môi trường có tên "kltn2025"):
+    - conda create -n kltn2025 
+    - conda activate kltn2025
+    3. Ta tiếp tục cài đặt python và pip (hệ thống quản lý gói cho python), để mô phỏng giống quá trình chạy, ta sẽ sử dụng python 3.10 và pip 23.2.1, ta có thể sử dụng các câu lệnh conda để cài đặt như sau:
+    - conda install python=3.10
+    - conda install pip=23.2.1
+
+II. Cài đặt các thư viện phục vụ:
+Ở đây chúng ta sẽ cài đặt các thư viện ở phiên bản thích hợp nhất đối với chương trình cần chạy.
+    1. Cài đặt numpy:
+    - pip install numpy==1.23.5 
+    2. Cài đặt pytorch:
+    - pip install torch==1.13.1 torchvision==0.14.1 torchaudio==0.13.1
+    3. Cài đặt spaCy, bạn hãy tham khảo cách cài đặt documents của thư viện ở trang sau: https://spacy.io/usage
+    4. Cài đặt sentence_transformer:
+    - pip install sentence_transformers
+
+III. Cài đặt fairseq:
+Ta tiếp tục cài đặt fairseq, nền tảng để chạy code, do chúng tôi thực hiện chỉnh sửa code trực tiếp trên mã nguồn của thư viện này, nên ta sẽ cài đặt trực tiếp bằng mã nguồn đã được cung cấp. Cụ thể như sau:
+    1. Dẫn vào thư mục chứa code:
+    - cd src/dynamic-kgnmt-fairseq
+    2. Cài đặt thư viện:
+    - pip install --editable ./
+    3. Cài đặt các thư viện hỗ trợ cho fairseq:
+    - pip install fastBPE sacremoses subword_nmt sentencepiece
+
+
